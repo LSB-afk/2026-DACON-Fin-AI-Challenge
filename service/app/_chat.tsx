@@ -38,7 +38,7 @@ export function AgentChatDrawer({
   const {
     utterance, setUtterance, todayInput, setTodayInput,
     busy, provider, result, error, steps,
-    finalSkillId, needsClarify, confirmFields, applyCheck, canApply,
+    finalSkillId, needsClarify, confirmFields, applyCheck, canApply, canApprove,
     approvedAt, setApprovedAt, run, editField, approve, downloadRecord, applyPayload,
   } = loop;
 
@@ -230,7 +230,7 @@ export function AgentChatDrawer({
                 {!approvedAt ? (
                   <button
                     onClick={approve}
-                    disabled={!applyCheck?.ok}
+                    disabled={!canApprove}
                     className="rounded-lg border-2 border-[var(--accent)] bg-[var(--accent-tint)] px-3 py-1.5 text-xs font-bold text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 motion-press"
                   >
                     값을 확인했습니다 — 승인

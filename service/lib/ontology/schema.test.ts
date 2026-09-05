@@ -34,7 +34,7 @@ import {
 
 const 저장소루트 = fileURLToPath(new URL("../../", import.meta.url));
 
-/** 이미 읽은 파일은 다시 읽지 않는다. 클래스 66개가 같은 파일을 수십 번 연다. */
+/** 이미 읽은 파일은 다시 읽지 않는다. 많은 항목이 같은 파일을 수십 번 연다. */
 const 파일캐시 = new Map<string, string | null>();
 
 function 파일읽기(경로: string): string | null {
@@ -95,6 +95,20 @@ for (const p of OBJECT_PROPERTIES) {
     assert.equal(위반, null, 위반 ?? "");
   });
 }
+
+test("데이터 속성도 값을 만든 실제 코드 위치를 가리킨다", () => {
+  const 위반 = DATA_PROPERTIES.map((p) => {
+    const codeSource = (p as typeof p & { codeSource?: string }).codeSource;
+    return codeSource
+      ? codeSource위반(p.id, p.label, codeSource)
+      : `[${p.id}] ${p.label}: codeSource가 없다`;
+  }).filter((value): value is string => value !== null);
+  assert.deepEqual(
+    위반,
+    [],
+    `코드 근거가 없는 데이터 속성 ${위반.length}건\n${위반.join("\n")}`,
+  );
+});
 
 /* ───────────────────── 2. 계층 무결성 ───────────────────── */
 
@@ -164,10 +178,10 @@ test("layer 값이 실제 계층 깊이와 같다", () => {
   assert.deepEqual(위반, [], `layer 불일치 ${위반.length}건\n${위반.join("\n")}`);
 });
 
-test("클래스가 40~70개다", () => {
+test("클래스가 탐색 가능한 85~100개 범위다", () => {
   assert.ok(
-    CLASSES.length >= 40 && CLASSES.length <= 70,
-    `클래스는 40~70개여야 하는데 ${CLASSES.length}개다. 적으면 흐름도와 다를 게 없고, 많으면 화면에서 못 읽는다.`,
+    CLASSES.length >= 85 && CLASSES.length <= 100,
+    `클래스는 85~100개여야 하는데 ${CLASSES.length}개다. 실행·통제·근거·번역 계약을 빠뜨리거나, 화면에서 읽기 어려울 만큼 부풀리면 안 된다.`,
   );
 });
 
@@ -176,6 +190,19 @@ test("note가 비어 있는 클래스가 없다", () => {
     (c) => `[${c.id}] ${c.label}: note가 ${c.note.trim().length}자다 (10자 이상)`,
   );
   assert.deepEqual(위반, [], `설명 없는 클래스 ${위반.length}건\n${위반.join("\n")}`);
+});
+
+test("실행 상담 맥락과 저장소의 합성 사례를 같은 개념으로 단정하지 않는다", () => {
+  const 상담맥락 = classById("utterance.case");
+  const 합성사례 = classById("utterance.case.fixture");
+  const 발화관계 = OBJECT_PROPERTIES.find((property) => property.id === "p.case-utters");
+
+  assert.equal(상담맥락?.codeSource, "lib/ontology/abox.ts:RunContext('caseId')");
+  assert.doesNotMatch(상담맥락?.note ?? "", /전부 합성/);
+  assert.equal(합성사례?.parent, "utterance.case");
+  assert.equal(합성사례?.codeSource, "lib/cases.ts:cases");
+  assert.match(합성사례?.note ?? "", /합성/);
+  assert.equal(발화관계?.codeSource, "lib/ontology/abox.ts:RunContext('utterance')");
 });
 
 /* ───────────────────── 3. 속성 정합성 ───────────────────── */

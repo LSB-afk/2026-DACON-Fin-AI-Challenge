@@ -8,6 +8,7 @@
  */
 
 import { FLOW, type FlowActor } from "./flow.ts";
+import type { AgentRequests } from "./agentExecution.ts";
 
 export type OfficeStation = {
   id: string;
@@ -40,9 +41,8 @@ export const OFFICE_STATIONS: readonly OfficeStation[] = FLOW.map((s) => ({
 }));
 
 /**
- * 서류 배달부의 경유 순서 — 동선이 곧 논리다.
- * FLOW에서 그대로 파생하고 office.test.ts가 동일성을 강제한다.
- * 화면(app/_office.tsx)의 걷기 애니메이션 웨이포인트는 이 배열 순서만 따라야 한다.
+ * Stable workflow identifiers for lookup and aggregation. This is not a spatial path.
+ * Departments and document transfers use actual dependency and corridor connections.
  */
 export const OFFICE_ROUTE: readonly string[] = FLOW.map((s) => s.id);
 
@@ -63,6 +63,14 @@ export type OfficeCtx = {
   hasResult: boolean;
   /** 3단 번역 제공자 연결 여부 (번역은 답변 탭에서 실행된다) */
   translateLive: boolean;
+  runId?: string | null;
+  inputRevision?: number;
+  requests?: AgentRequests;
+  translation?: {
+    status: "idle" | "running" | "completed" | "failed" | "rejected" | "skipped";
+    language?: string;
+    detail?: string;
+  };
 };
 
 /**
@@ -74,21 +82,60 @@ export function stationStatus(
   steps: readonly StepLike[],
   ctx: OfficeCtx,
 ): StepLike["status"] | null {
-  if (id === "input") return ctx.busy || ctx.hasResult ? "완료" : null;
+  if (id === "input") return ctx.busy || ctx.hasResult || ctx.runId ? "완료" : null;
   if (id === "translate") {
-    // 번역은 이 화면이 아니라 답변 탭에서 눌린다 — 여기서는 배선 상태만 말한다
-    if (!ctx.translateLive) return ctx.hasResult ? "미연결" : null;
-    const narrateDone = steps.some((s) => s.n === "3단" && s.status === "완료");
-    return narrateDone ? "대기" : null;
+    const translation = ctx.translation;
+    // Availability never implies an active translation. Korean/optional idle work is omitted.
+    if (!translation || translation.status === "skipped" || translation.language === "ko") return null;
+    if (translation.status === "running") return "대기";
+    if (translation.status === "completed") return "완료";
+    if (translation.status === "failed" || translation.status === "rejected") return "차단";
+    if (!ctx.translateLive && ctx.hasResult && translation.language) return "미연결";
+    return null;
+  }
+  if ((id === "routing" || id === "extract") && ctx.requests) {
+    const request = ctx.requests[id];
+    if (request.status === "running") return "대기";
+    if (request.status === "completed") return "완료";
+    if (request.status === "failed") return "차단";
+    return null;
   }
   const hit = steps.find((s) => N_TO_ID[s.n] === id);
   if (hit) return hit.status;
   // 라우팅·추출은 한 POST 에 묶여 있다 — 호출 중에는 둘 다 대기로 그린다
   if (ctx.busy && (id === "routing" || id === "extract")) return "대기";
+  if (departmentWaitReason(id, steps, ctx)) return "대기";
   return null;
 }
 
+const DEPARTMENT_PREREQUISITES: Readonly<Record<string, readonly string[]>> = {
+  judge: ["routing", "extract"],
+  guard: ["judge"],
+  ontology: ["judge"],
+  narrate: ["guard", "ontology"],
+};
+
+/** Waiting is a dependency fact, not a fabricated running request. Completed work wins. */
+export function departmentWaitReason(id: string, steps: readonly StepLike[], ctx: OfficeCtx): string | null {
+  if ((!ctx.busy && !ctx.hasResult) || steps.some((step) => N_TO_ID[step.n] === id)) return null;
+  const prerequisites = DEPARTMENT_PREREQUISITES[id];
+  if (!prerequisites) return null;
+  const pending = prerequisites.filter((prerequisite) => stationStatus(prerequisite, steps, ctx) !== "완료");
+  const names = (pending.length ? pending : prerequisites)
+    .map((prerequisite) => OFFICE_STATIONS.find((station) => station.id === prerequisite)?.이름 ?? prerequisite)
+    .join(" · ");
+  return pending.length ? names + " 결과를 기다립니다." : names + " 응답을 받았습니다. 현재 확인값으로 처리할 준비를 기다립니다.";
+}
+
 /** 스테이션의 타임라인 단계 — 상세 패널이 단계 로그(detail)를 보여줄 때 쓴다 */
-export function stationStep(id: string, steps: readonly StepLike[]): StepLike | null {
-  return steps.find((s) => N_TO_ID[s.n] === id) ?? null;
+export function stationStep(id: string, steps: readonly StepLike[], ctx?: OfficeCtx): StepLike | null {
+  const actual = steps.find((s) => N_TO_ID[s.n] === id);
+  if (actual) return actual;
+  const detail = ctx ? departmentWaitReason(id, steps, ctx) : null;
+  if (!detail) return null;
+  return {
+    n: Object.keys(N_TO_ID).find((n) => N_TO_ID[n] === id) ?? id,
+    label: OFFICE_STATIONS.find((station) => station.id === id)?.이름 ?? id,
+    status: "대기", detail,
+  };
 }

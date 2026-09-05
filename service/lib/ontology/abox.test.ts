@@ -17,7 +17,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { buildRunABox, validateABox } from "./abox.ts";
-import { judgeDeparture, type DepartureInput } from "../rules/departure.ts";
+import { judgeDeparture, monthsBetween, type DepartureInput } from "../rules/departure.ts";
 import { judgePayslip } from "../rules/payslip.ts";
 import { samples } from "../samples.ts";
 
@@ -189,6 +189,73 @@ test("발화·후보까지 포함한 전체 실행(콘솔 경로)이 T-Box 를 �
     departure: 출국조건({}),
     findings: judgeDeparture(출국조건({})),
   });
+});
+
+test("실행에서 실제로 받은 발화·라우팅·출국 입력값을 데이터 속성으로 보존한다", () => {
+  const 입력 = 출국조건({
+    nationality: "우즈베키스탄",
+    visa: "E-9",
+    hireDate: "2022-04-18",
+    departureDate: "2026-10-03",
+    monthlyWage: 3_200_000,
+    today: "2026-09-05",
+  });
+  const { abox } = 실제판정대조("입력값-증거", {
+    caseId: "T-입력값",
+    utterance: "10월 3일 출국 전에 받을 돈을 확인해 주세요",
+    routes: [
+      { skill: "출국 정산", score: 3, matched: ["출국", "받을 돈"] },
+    ],
+    skillId: "departure",
+    departure: 입력,
+    findings: judgeDeparture(입력),
+  });
+
+  const 값 = (suffix: string) =>
+    abox.individuals.find((x) => x.id === `${abox.runId}#${suffix}`)?.values;
+
+  assert.deepEqual(값("utterance"), {
+    "d.utterance-text": "10월 3일 출국 전에 받을 돈을 확인해 주세요",
+  });
+  assert.deepEqual(값("route-0"), {
+    "d.route-skill": "출국 정산",
+    "d.route-score": 3,
+    "d.route-matched": ["출국", "받을 돈"],
+  });
+  assert.deepEqual(값("nationality"), { "d.nationality": "우즈베키스탄" });
+  assert.deepEqual(값("visa"), { "d.visa": "E-9" });
+  assert.deepEqual(값("tenure"), {
+    "d.min-tenure": monthsBetween(입력.hireDate, 입력.departureDate),
+    "d.hire-date": "2022-04-18",
+    "d.departure-date": "2026-10-03",
+  });
+  assert.deepEqual(값("today"), { "d.reference-date": "2026-09-05" });
+  assert.deepEqual(값("wage"), { "d.monthly-wage": 3_200_000 });
+});
+
+test("제공하지 않은 선택 입력은 빈 값이나 추정값으로 만들지 않는다", () => {
+  const 비어있는그래프 = buildRunABox({
+    caseId: "T-생략",
+    skillId: "payslip",
+    findings: [],
+  });
+  assert.deepEqual(비어있는그래프.individuals, []);
+  assert.deepEqual(validateABox(비어있는그래프).violations, []);
+
+  const 발화만 = buildRunABox({
+    caseId: "T-발화만",
+    utterance: "월급을 확인하고 싶어요",
+    skillId: null,
+    findings: [],
+  });
+  assert.deepEqual(
+    발화만.individuals.find((x) => x.id === "T-발화만#utterance")?.values,
+    { "d.utterance-text": "월급을 확인하고 싶어요" },
+  );
+  assert.equal(
+    발화만.individuals.some((x) => x.class === "utterance.candidate"),
+    false,
+  );
 });
 
 /* ───────────── 2. 변형 포착 — 검증기가 침묵하지 않는가 ───────────── */

@@ -1,0 +1,34 @@
+{
+  "startedAt": "2026-09-05T08:46:03.253Z",
+  "baseURL": "http://localhost:3001",
+  "mode": "Controlled browser-only provider fixtures; NOT live inference",
+  "browser": "152.0.7977.82",
+  "tests": [
+    {
+      "name": "payslip-handoff-preserves-small-workplace",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "failed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:46:03.529Z",
+      "failure": "locator.innerText: Timeout 12000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('heading', { level: 1 })\u001b[22m\n\n    at /Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/scripts/verify-central-office.mjs:410:64\n    at async scenario (/Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/scripts/verify-central-office.mjs:209:5)\n    at async main (/Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/scripts/verify-central-office.mjs:400:38)\n    at async file:///Users/leeseungbo/Desktop/%5BDACON%5D/%E1%84%80%E1%85%B3%E1%86%B7%E1%84%8B%E1%85%B2%E1%86%BC%20AI%20challenge/service/scripts/verify-central-office.mjs:1138:7",
+      "finishedAt": "2026-09-05T08:46:17.687Z"
+    }
+  ],
+  "screenshots": [
+    "failure-payslip-handoff-preserves-small-workplace.png"
+  ],
+  "measurements": {},
+  "coverageLimits": [
+    "Controlled responses prove UI behavior; they do not independently prove provider inference or backend translation validation.",
+    "Frame samples measure this browser and viewport only; they are not a universal FPS guarantee."
+  ],
+  "finishedAt": "2026-09-05T08:46:17.691Z",
+  "summary": {
+    "passed": 0,
+    "failed": 1
+  }
+}

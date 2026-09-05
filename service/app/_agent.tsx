@@ -1,24 +1,21 @@
 "use client";
 
 /**
- * Agent 실행 — Fin:AI 운영 도시 + 운영 패널.
+ * Agent 실행 — 중앙 운영 사무실 + 상담 패널.
  *
- * 두 모드(명세 2절):
- *   패널 열림 — 좌측 오버레이 드로어(발화 입력·타임라인·승인). 뒤의 도시는 살아 있다.
- *   패널 닫힘 — 도시가 헤더 아래 전체를 차지. 얇은 상태 바가 현재 고객·단계·승인 유지.
- *
- * 상태 기계는 _agent-core 한 벌(채팅 드로어와 공유) 그대로 — 판정·승인 계약 무접촉.
- * 모바일(<1024px)은 기존 스택 레이아웃 + 칩 도시로 강등된다.
+ * 사무실이 주 화면이며 입력·기록·승인은 필요할 때 여는 패널에 둔다.
+ * 데스크톱과 모바일은 같은 실행 상태, 답변과 승인 조건을 읽는다.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { 예시발화, type AgentLoop, type ApplyPayload, type IntakeFields } from "./_agent-core";
 import { AgentOffice } from "./_office";
-import { currentStageLabel, gateOpen } from "@/lib/officeActors";
-import { N_TO_ID } from "@/lib/office";
+import { currentStageLabel, gateOpen, type ActorCtx } from "@/lib/officeActors";
+import { N_TO_ID, type OfficeCtx } from "@/lib/office";
+import { 언어들 } from "@/lib/ai/contract";
 import { FLOW } from "@/lib/flow";
 import { cases } from "@/lib/cases";
-import type { Step } from "./_tabs";
+import type { Step, TranslateState } from "./_tabs";
 import { Icon, Pill, SectionHead, Sentences, useNarrow, navLabel } from "./_ui";
 
 /** 사무실 스테이션 id → 타임라인 단계 번호 (스크롤 이동용) */
@@ -40,14 +37,20 @@ export function AgentRunView({
   onApply,
   onSelectCase,
   onNavigate,
+  translation,
+  translateState,
+  onTranslate,
 }: {
   loop: AgentLoop;
-  /** 활성 고객이 연결된 익명 케이스 id (도시의 고객 표현) */
+  /** 활성 고객이 연결된 익명 케이스 id */
   caseId?: string;
   onApply: (p: ApplyPayload) => void;
-  /** 도시의 대기 고객 클릭 → 그 상담으로 전환 */
+  /** 대기 고객 선택 → 해당 상담으로 전환 */
   onSelectCase?: (id: string) => void;
   onNavigate?: (view: string, tab?: string) => void;
+  translation?: OfficeCtx["translation"];
+  translateState?: TranslateState;
+  onTranslate?: (language: TranslateState["lang"]) => void;
 }) {
   const {
     utterance, setUtterance, todayInput, setTodayInput,
@@ -60,20 +63,10 @@ export function AgentRunView({
   const narrow = useNarrow(1024);
   const live = !!provider?.provider;
 
-  /* ── 운영 패널 — 첫 진입은 열림, 세션 기억 ── */
-  const [panelOpen, setPanelOpen] = useState(true);
-  useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      try {
-        const v = sessionStorage.getItem("fin-ops-panel");
-        if (v === "closed") setPanelOpen(false);
-      } catch {}
-    });
-    return () => cancelAnimationFrame(id);
-  }, []);
+  /* 첫 진입은 중앙 사무실을 보여주며 상담 입력은 명시적으로 연다. */
+  const [panelOpen, setPanelOpen] = useState(false);
   function togglePanel(next: boolean) {
     setPanelOpen(next);
-    try { sessionStorage.setItem("fin-ops-panel", next ? "open" : "closed"); } catch {}
   }
 
   /* 닫은 뒤 키보드 초점을 토글 버튼으로 복원 — 포인터 닫기(외부 클릭)는 초점을 훔치지 않는다 */
@@ -122,15 +115,23 @@ export function AgentRunView({
       return;
     }
     run();
-    if (!narrow) closePanel(false); // 실행하면 도시의 흐름을 보여준다 — 되돌아오는 길은 상태 바
+    if (!narrow) closePanel(false);
   }
 
   function apply() {
     const p = applyPayload();
-    if (p) onApply(p);
+    if (p) {
+      onApply(p);
+      if (!narrow) closePanel(false);
+    }
   }
 
   function scrollToStage(stationId: string) {
+    if (stationId === "translate") {
+      setPanelOpen(true);
+      requestAnimationFrame(() => (document.getElementById("agent-answer") ?? document.querySelector('[data-stage="3단"]') ?? document.getElementById("agent-timeline") ?? document.getElementById("agent-utterance"))?.scrollIntoView({ block: "center" }));
+      return;
+    }
     if (stationId === "input" || stationId === "counselor") {
       setPanelOpen(true);
       const target = stationId === "input" ? "agent-utterance" : "approval-panel";
@@ -154,7 +155,11 @@ export function AgentRunView({
     requestAnimationFrame(seek);
   }
 
-  const actorCtx = { busy, hasResult: !!result, translateLive: live, approvedAt, applyCheckOk: applyCheck?.ok ?? false };
+  const actorCtx: ActorCtx = {
+    busy, hasResult: !!result, translateLive: !!translateState?.provider?.provider, approvedAt, applyCheckOk: loop.canApprove,
+    requests: loop.requests, runId: loop.runId, inputRevision: loop.inputRevision,
+    application: loop.application, recordStatus: loop.recordStatus, translation,
+  };
   const stageLabel = currentStageLabel(steps, actorCtx, stationName);
   const needsInput = !!result && !busy && applyCheck !== null && !applyCheck.ok;
 
@@ -172,7 +177,7 @@ export function AgentRunView({
         주민등록번호, 외국인등록번호, 계좌번호, 전화번호는 적지 마세요.
         적더라도 보내기 전에 서버가 막습니다. (분당 20회 제한)
       </p>
-      <label className="mt-4 block text-2xs font-semibold text-[var(--muted)]">상담 내용 (아무 문장이나 자유롭게)</label>
+      <label htmlFor="agent-utterance" className="mt-4 block text-2xs font-semibold text-[var(--muted)]">상담 내용 (아무 문장이나 자유롭게)</label>
       <textarea
         id="agent-utterance"
         ref={utterRef}
@@ -194,8 +199,9 @@ export function AgentRunView({
         ))}
       </div>
       <div className="mt-3">
-        <label className="block text-2xs font-semibold text-[var(--muted)]">기준일</label>
+        <label htmlFor="agent-today" className="block text-2xs font-semibold text-[var(--muted)]">기준일</label>
         <input
+          id="agent-today"
           type="date"
           value={todayInput}
           onChange={(e) => setTodayInput(e.target.value)}
@@ -211,7 +217,8 @@ export function AgentRunView({
         {busy && <span className="motion-spin" aria-hidden />}
         {busy ? "AI 상담 실행 중…" : "AI 상담 실행하기"}
       </button>
-      {error && <p className="mt-2 rounded-md border border-[var(--warning)] bg-[var(--warning-soft)] px-3 py-2 text-xs text-[var(--warning-ink)]">{error}</p>}
+      {busy && <button onClick={loop.cancel} className="mt-2 w-full rounded-lg border border-[var(--line)] py-2 text-sm font-semibold">실행 취소</button>}
+      {error && <p role="alert" className="mt-2 rounded-md border border-[var(--warning)] bg-[var(--warning-soft)] px-3 py-2 text-xs text-[var(--warning-ink)]">{error}</p>}
       <p className="mt-3 text-center text-2xs leading-relaxed text-[var(--muted-soft)]">
         <span className="block">AI 단계가 막혀도 판정 결과 보기의 입력 패널에서 같은 값을 직접 넣어 판정할 수 있습니다.</span>
         <span className="block">AI는 돕기만 하고, 결정은 코드가 합니다.</span>
@@ -221,16 +228,16 @@ export function AgentRunView({
 
   const timelineSection = (
     <div className="mt-6">
-      <h3 className="text-sm font-bold">단계 타임라인</h3>
-      <p className="mt-1 text-2xs text-[var(--muted)]">검사 고르기, 값 뽑기, 판정, 가드레일, 용어 대조, 답변 순서로 진행합니다. 실패한 단계에는 이유가 함께 표시됩니다.</p>
+      <h3 className="text-sm font-bold">업무 실행 기록</h3>
+      <p className="mt-1 text-2xs text-[var(--muted)]">업무 분류와 정보 추출을 함께 요청합니다. 필요한 결과가 준비되면 판정·검토·답변 작성으로 이어집니다. 요청별 완료와 실패를 따로 확인할 수 있습니다.</p>
       {steps.length === 0 ? (
         <div className="mt-3 rounded-lg border border-dashed border-[var(--line)] bg-[var(--surface)] px-6 py-10 text-center text-sm text-[var(--muted)]">
-          AI 상담을 실행하면 단계가 차례로 채워집니다.
+          중앙 로비에서 상담을 시작하면 부서별 처리 기록이 표시됩니다.
         </div>
       ) : (
         <ol id="agent-timeline" className="mt-3 overflow-hidden rounded-lg border border-[var(--line)]">
           {steps.map((s: Step, i: number) => {
-            const isRunning = s.status === "대기";
+            const isRunning = (s.n === "0단" && loop.requests.routing.status === "running") || (s.n === "1단" && loop.requests.extract.status === "running");
             return (
               <li
                 key={`${s.n}-${i}`}
@@ -272,12 +279,12 @@ export function AgentRunView({
             {approvedAt ? (
               <Pill tone="ok">승인됨 {approvedAt}</Pill>
             ) : (
-              <Pill tone="muted">승인 전 (판정으로 넘어가지 않음)</Pill>
+              <Pill tone="muted">승인 전 · 결과 적용 대기</Pill>
             )}
           </div>
           <p className="mt-1 text-2xs leading-relaxed text-[var(--muted)]">
             AI가 뽑은 값은 초안입니다. 원문 근거와 비교해 틀리면 바로 고치세요.
-            승인해야 판정과 상담 기록으로 넘어갑니다. 값을 고치면 승인이 풀립니다.
+            현재 입력으로 계산한 결과를 검토한 뒤 승인하면 결과를 적용할 수 있습니다. 값을 고치면 승인이 풀립니다.
           </p>
           <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
             {(
@@ -293,9 +300,10 @@ export function AgentRunView({
               const raw = confirmFields[key as keyof IntakeFields];
               return (
                 <div key={key}>
-                  <label className="block text-2xs font-semibold text-[var(--muted)]">{name}</label>
+                  <label htmlFor={`agent-field-${key}`} className="block text-2xs font-semibold text-[var(--muted)]">{name}</label>
                   {type === "visa" ? (
                     <select
+                      id={`agent-field-${key}`}
                       value={String(raw ?? "")}
                       disabled={!!approvedAt}
                       onChange={(e) => editField(key, e.target.value)}
@@ -308,6 +316,7 @@ export function AgentRunView({
                     </select>
                   ) : (
                     <input
+                      id={`agent-field-${key}`}
                       type={type}
                       value={String(raw ?? "")}
                       disabled={!!approvedAt}
@@ -333,7 +342,7 @@ export function AgentRunView({
             {!approvedAt ? (
               <button
                 onClick={approve}
-                disabled={!applyCheck?.ok}
+                disabled={!loop.canApprove}
                 className="rounded-lg border-2 border-[var(--accent)] bg-[var(--accent-tint)] px-4 py-2 text-sm font-bold text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 motion-press"
               >
                 값을 확인했습니다. 승인
@@ -368,14 +377,16 @@ export function AgentRunView({
           )}
         </div>
       )}
-      {canApply && (
+      {canApply && loop.application !== "applied" && (
         <button
           onClick={apply}
           className="w-full rounded-lg border-2 border-[var(--accent)] bg-[var(--accent-tint)] py-3 text-sm font-bold text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white motion-press"
         >
-          {finalSkillId === "payslip" ? "명세서 입력으로 이동 ▶" : "이 값으로 판정 보기 ▶"}
+          {finalSkillId === "payslip" ? "명세서 입력으로 이동 ▶" : "승인한 결과 적용 · 상담 완료"}
         </button>
       )}
+      {loop.application === "applied" && <p className="rounded-lg border border-[var(--good)] bg-[var(--good-soft)] px-3 py-2 text-sm font-semibold text-[var(--good-ink)]">결과 적용 · 상담 기록 완료</p>}
+      {loop.application === "applied" && onNavigate && <button onClick={() => onNavigate("monitor", "findings")} className="mt-2 w-full rounded-lg border border-[var(--line)] px-3 py-2 text-sm font-semibold">판정 결과 자세히 보기</button>}
       {!needsClarify && applyCheck && !applyCheck.ok && (
         <div className="rounded-lg border border-[var(--warning)] bg-[var(--warning-soft)] px-4 py-3">
           <p className="text-sm font-bold text-[var(--warning-ink)]">
@@ -399,7 +410,44 @@ export function AgentRunView({
     </div>
   );
 
-  /* ── 모바일 — 기존 스택 + 칩 도시 (기능 유지) ── */
+  const answerSection = loop.finalAnswer && !busy && (
+    <section id="agent-answer" className="mt-5 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3">
+      <h3 className="text-sm font-bold">답변 확인 · 번역</h3>
+      <p className="mt-1 text-2xs text-[var(--muted)]">현재 확인한 입력으로 만든 답변입니다. 번역할 때도 금액과 날짜를 그대로 보존합니다.</p>
+      {translateState && onTranslate && <div className="mt-3 flex flex-wrap gap-1.5" aria-label="답변 언어">
+        {[{ code: "ko" as const, label: "한국어 원문" }, ...언어들].map((language) => <button
+          key={language.code}
+          aria-pressed={translateState.lang === language.code}
+          disabled={language.code !== "ko" && !translateState.provider?.provider}
+          onClick={() => onTranslate(language.code)}
+          className={`rounded-full border px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50 ${translateState.lang === language.code ? "border-[var(--accent)] bg-[var(--accent)] text-white" : "border-[var(--line)] bg-[var(--panel)]"}`}
+        >{language.label}</button>)}
+      </div>}
+      <p role="status" className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{translation?.detail ?? "한국어 답변 준비 완료"}</p>
+      {translateState && !translateState.provider?.provider && <p className="mt-1 text-2xs text-[var(--muted)]">번역 서비스 미연결 · 한국어 원문을 사용할 수 있습니다.</p>}
+      <details className="mt-3">
+        <summary className="cursor-pointer text-xs font-semibold">답변 내용 펼치기</summary>
+        {(() => {
+          const answer = translateState?.done && translateState.done.lang === translateState.lang ? translateState.done.answer : loop.finalAnswer;
+          return answer && <div className="mt-2 space-y-2 text-xs leading-relaxed">
+            <p className="font-bold">{answer.headline}</p>
+            {answer.blocks.map((block, i) => <p key={`${block.rule}-${i}`}>{block.lines.join(" ")}</p>)}
+            {answer.todo.map((text, i) => <p key={`todo-${i}`}>{text}</p>)}
+            {answer.notices.map((text, i) => <p key={`notice-${i}`} className="text-[var(--muted)]">{text}</p>)}
+          </div>;
+        })()}
+      </details>
+    </section>
+  );
+
+  const caseInfo = caseId
+    ? (() => {
+        const c = cases.find((x) => x.id === caseId);
+        return c ? { id: c.id, badge: c.badge, kind: c.kind } : { id: caseId, badge: "상담", kind: "unknown" };
+      })()
+    : undefined;
+
+  /* 모바일 — 사무실 요약과 실행·승인 기능 */
   if (narrow) {
     return (
       <div className="px-4 py-6">
@@ -409,12 +457,13 @@ export function AgentRunView({
           text="자유롭게 쓴 문장은 AI가 읽고 정리합니다. 판정, 검사, 용어 대조, 답변 작성은 언제나 같은 답을 내는 코드가 합니다."
         />
         <div className="mt-4 border-b-2 border-[var(--line-strong)]" />
-        <div className="mt-4">{inputSection}</div>
-        {timelineSection}
-        {approvalSection}
-        <div className="mt-6 border-t-2 border-[var(--line-strong)] pt-3">
-          <h3 className="text-base font-bold tracking-tight">Fin:AI 운영 도시</h3>
+        <div className="mt-4">
+          <h3 className="text-base font-bold tracking-tight">Fin:AI 운영 사무실</h3>
           <AgentOffice
+            runtime={actorCtx}
+            caseInfo={caseInfo}
+            queue={cases.filter((c) => c.id !== caseId).map((c) => ({ id: c.id, badge: c.badge, kind: c.kind }))}
+            onSelectCase={onSelectCase}
             steps={steps}
             busy={busy}
             hasResult={!!result}
@@ -425,32 +474,30 @@ export function AgentRunView({
             onNavigate={onNavigate}
           />
         </div>
+        <div className="mt-4">{inputSection}</div>
+        {timelineSection}
+        {approvalSection}
+        {answerSection}
       </div>
     );
   }
 
-  /* ── 데스크톱 — 전체 화면 도시 + 오버레이 운영 패널 ── */
-  const caseInfo = caseId
-    ? (() => {
-        const c = cases.find((x) => x.id === caseId);
-        return c ? { id: c.id, badge: c.badge, kind: c.kind } : { id: caseId, badge: "상담", kind: "unknown" };
-      })()
-    : undefined;
-
+  /* 데스크톱 — 전체 사무실과 운영 패널 */
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* 얇은 상태 바 — 패널이 닫혀도 현재 고객·연결·단계·승인이 보인다 */}
       <div className="flex flex-wrap items-center gap-2 border-b-2 border-[var(--line-strong)] px-4 py-2.5">
         <div className="min-w-0">
-          <span className="eyebrow">FIN:AI OPERATIONS CITY</span>
-          <h2 className="text-base font-bold leading-tight tracking-tight">{navLabel("agent-run")} · 운영 도시</h2>
+          <span className="eyebrow">FIN:AI OPERATIONS OFFICE</span>
+          <h2 className="text-base font-bold leading-tight tracking-tight">{navLabel("agent-run")} · 운영 사무실</h2>
         </div>
         <div className="mx-2 h-8 w-px bg-[var(--line)]" aria-hidden />
         {caseInfo && <Pill tone="accent">{caseInfo.id} · {caseInfo.badge}</Pill>}
         <Pill tone={live ? "ok" : "warn"}>{live ? `${provider?.provider}:${provider?.model}` : "AI 미연결"}</Pill>
         <Pill tone={needsInput ? "warn" : "muted"}>{stageLabel}</Pill>
-        <Pill tone={approvedAt ? "ok" : "muted"}>{approvedAt ? "승인 완료 · 결과 게이트 열림" : gateOpen(actorCtx) ? "결과 게이트 열림" : "결과 게이트 잠김"}</Pill>
+        <Pill tone={gateOpen(actorCtx) ? "ok" : "muted"}>{loop.application === "applied" ? "결과 적용 · 기록 완료" : approvedAt ? "승인 완료 · 결과 적용 대기" : "상담사 검토 전"}</Pill>
         <div className="ml-auto flex items-center gap-2">
+          {busy && <button onClick={loop.cancel} className="rounded-md border border-[var(--line)] px-2.5 py-1.5 text-xs font-bold">실행 취소</button>}
           {needsInput && !panelOpen && (
             <button
               onClick={() => togglePanel(true)}
@@ -472,15 +519,21 @@ export function AgentRunView({
         </div>
       </div>
 
-      {/* 도시 + 오버레이 패널 */}
+      {error && !panelOpen && <div role="alert" className="flex items-center justify-between gap-3 border-b border-[var(--warning)] bg-[var(--warning-soft)] px-4 py-2 text-xs text-[var(--warning-ink)]">
+        <span>{error}</span>
+        <button onClick={() => togglePanel(true)} className="shrink-0 rounded border border-[var(--warning)] px-2 py-1 font-bold">입력 확인 · 다시 실행</button>
+      </div>}
+
+      {/* 사무실 + 운영 패널 */}
       <div
         className="relative min-h-0 flex-1"
         onPointerDownCapture={(e) => {
-          /* 패널 외부(도시) 클릭 → 패널 닫기. 포인터 사용자라 초점은 훔치지 않는다 */
+          /* 패널 외부 클릭은 초점을 이동하지 않고 패널을 닫는다. */
           if (panelOpen && !(e.target as HTMLElement).closest("#ops-panel")) closePanel(false);
         }}
       >
         <AgentOffice
+          runtime={actorCtx}
           fill
           steps={steps}
           busy={busy}
@@ -519,6 +572,7 @@ export function AgentRunView({
             {inputSection}
             {timelineSection}
             {approvalSection}
+            {answerSection}
           </div>
         )}
       </div>

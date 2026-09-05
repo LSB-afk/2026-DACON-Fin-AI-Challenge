@@ -17,17 +17,9 @@ import { standards, verifyCounts } from "@/lib/standards";
 import { listHarnesses, runSelfTest, hookLog } from "@/lib/harness/core";
 import { GUARDRAIL_CATALOG, LEVEL_MEANING } from "@/lib/harness/guardrails";
 import { 기준2026 } from "@/lib/rules/constants-2026";
-import {
-  CLASSES,
-  OBJECT_PROPERTIES,
-  DATA_PROPERTIES,
-  AXIOMS,
-  enforcedRatio,
-  classById,
-  type OntologyClass,
-} from "@/lib/ontology/schema";
-import type { ABox, ABoxCheckResult } from "@/lib/ontology/abox";
-import { OntologyGraph } from "./_graph";
+import { OntologyWorkspace, type OntologyExecution } from "./_ontology";
+import { buildLiveOntology, type LiveOntologyInput } from "@/lib/ontology/live";
+import type { AgentLoop } from "./_agent-core";
 import { SectionHead, SubHead, Sentences, Pill, EmptyBox, StandardCard, Icon, won, navLabel, badgeTone } from "./_ui";
 
 
@@ -872,231 +864,26 @@ export function ExplainView() {
 
 /* ── 온톨로지 T-Box·A-Box ── */
 
-const 역할라벨: Record<string, string> = {
-  입력: "들어온 것",
-  산출: "만든 것",
-  제약: "법정 제약",
-  통제: "검사·차단",
-};
-
-/** 부모를 타고 내려가 후손 전부를 깊이와 함께 모은다 */
-function 후손(id: string, 깊이 = 1): { c: OntologyClass; 깊이: number }[] {
-  return CLASSES.filter((x) => x.parent === id).flatMap((c) => [
-    { c, 깊이 },
-    ...후손(c.id, 깊이 + 1),
-  ]);
-}
-
 export function OntologyView({
   abox,
+  source,
+  live,
+  loop,
+  onOpenConsult,
 }: {
-  abox: { graph: ABox; check: ABoxCheckResult } | null;
+  abox: OntologyExecution | null;
+  source?: { label: string; description: string };
+  live?: LiveOntologyInput;
+  loop?: AgentLoop;
+  onOpenConsult?: () => void;
 }) {
-  const 비율 = enforcedRatio();
-  const 최상위 = CLASSES.filter((c) => c.parent === null);
-
-  /* 실행 A-Box 분포 */
-  const 분포 = new Map<string, number>();
-  for (const ind of abox?.graph.individuals ?? [])
-    분포.set(ind.class, (분포.get(ind.class) ?? 0) + 1);
-  const 분포목록 = [...분포.entries()].sort((a, b) => b[1] - a[1]);
-
   return (
     <Wrap
       en="ONTOLOGY — T-BOX / A-BOX"
       ko={navLabel("ontology")}
-      desc="이 서비스가 쓰는 개념을 정리한 사전(T-Box)과, 판정 한 건을 그 사전의 말로 풀어 쓴 기록(A-Box)입니다. 흐름도가 순서만 보여주는 것과 달리, 여기에는 '무엇과 무엇은 절대 함께 있을 수 없는지'(공리)까지 적혀 있습니다. 그중 몇 개가 코드로 강제되는지도 그대로 보여줍니다."
-      right={
-        <div className="flex flex-wrap gap-1.5">
-          <Pill tone="accent">클래스 {CLASSES.length}</Pill>
-          <Pill>관계 {OBJECT_PROPERTIES.length}</Pill>
-          <Pill>데이터 속성 {DATA_PROPERTIES.length}</Pill>
-          <Pill tone={비율.enforced === 비율.total ? "ok" : "warn"}>
-            공리 강제 {비율.enforced}/{비율.total}
-          </Pill>
-        </div>
-      }
-      readme={[
-        "위쪽 3D 그래프에서 색을 먼저 봅니다. 색은 역할(들어온 것, 만든 것, 법정 제약, 검사·차단)을 나타냅니다.",
-        "점을 누르면 오른쪽에 설명과 관계 목록이 뜹니다. 아래 개념 지도 표에서 같은 개념을 글로 확인할 수 있습니다.",
-        "아래 공리 표의 강제 {enforced}/{total}이 전부가 아니면, 문서에는 적혀 있지만 코드가 아직 막지 못하는 규칙이 있다는 뜻입니다.",
-      ].map((s) => s.replace("{enforced}", String(비율.enforced)).replace("{total}", String(비율.total)))}
+      desc="상담을 실행하면 요청, 확인한 정보, 판정과 근거가 서비스 지도에 연결됩니다. 개념 사전과 현재 판정도 같은 자리에서 살펴보세요."
     >
-      {/* 옵시디언 지식 그래프의 3차원 판 — 아래 표들과 같은 데이터를 다르게 보는 것뿐이다 */}
-      <p className="text-base font-bold">지식 그래프 (3차원)</p>
-      <p className="mt-1 text-xs text-[var(--muted)]">
-        노드는 개념, 선은 관계다. 색은 역할만 따른다 — 들어온 것·만든 것·제약·통제.
-        군집은 최상위 8묶음에서 퍼져 나온다.
-      </p>
-      <div className="mt-3">
-        <OntologyGraph abox={abox?.graph ?? null} />
-      </div>
-
-      {/* 1. 클래스 지도 — 8묶음 */}
-      <SubHead>개념 지도: 최상위 8묶음 (들어온 것 3 · 만든 것 3 · 제약과 검사 2)</SubHead>
-      {/* 2열 4행 — 한 열에 여덟 줄로 늘어놓으면 스크롤이 길다. 펼친 항목만 제 높이로 자란다 */}
-      <div className="mt-3 grid items-start gap-2 lg:grid-cols-2">
-        {최상위.map((top) => {
-          const 자식 = 후손(top.id);
-          return (
-            <details key={top.id} className="min-w-0 rounded-lg border border-[var(--line)]">
-              <summary className="flex cursor-pointer flex-wrap items-center gap-2 px-4 py-3 text-sm">
-                <Pill tone={top.role === "제약" || top.role === "통제" ? "warn" : "accent"}>
-                  {역할라벨[top.role]}
-                </Pill>
-                <span className="font-semibold">{top.label}</span>
-                <span className="font-mono text-2xs text-[var(--muted-soft)]">
-                  {top.id}
-                </span>
-                <span className="ml-auto text-xs text-[var(--muted)]">
-                  하위 {자식.length}개
-                </span>
-              </summary>
-              <div className="border-t border-[var(--line-soft)] px-4 py-3">
-                <p className="text-xs leading-relaxed text-[var(--muted)]">{top.note}</p>
-                <p className="mt-1 font-mono text-2xs text-[var(--muted-soft)]">
-                  {top.codeSource}
-                </p>
-                <table className="mt-3 w-full text-xs">
-                  <tbody>
-                    {자식.map(({ c, 깊이 }) => (
-                      <tr key={c.id} className={셀}>
-                        <td
-                          className="py-2 font-semibold"
-                          style={{ paddingLeft: `${(깊이 - 1) * 16}px` }}
-                        >
-                          {c.label}
-                          <span className="ml-2 font-mono text-2xs font-normal text-[var(--muted-soft)]">
-                            {c.id}
-                          </span>
-                        </td>
-                        <td className="w-40 py-2 font-mono text-2xs text-[var(--muted-soft)]">
-                          {c.codeSource}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          );
-        })}
-      </div>
-
-      {/* 2. 관계 */}
-      <SubHead>관계 {OBJECT_PROPERTIES.length}종 (점선 ┄ 은 근거 인용)</SubHead>
-      {/*
-       * 2열 — 줄마다 칸 폭을 고정(이름 8rem · 뜻 9rem · 나머지)해 두 열의 세로선이 맞는다.
-       * 표 두 개로 나누면 열마다 칸 폭이 제각각이 된다(2026-09-02 지적) — 그래서 표가 아니라 격자다.
-       */}
-      <div className="mt-2 grid gap-x-10 lg:grid-cols-2">
-        {OBJECT_PROPERTIES.map((p) => (
-          <div key={p.id} className={`grid grid-cols-[8rem_9rem_1fr] items-baseline gap-x-3 text-xs ${셀}`}>
-            <span className="truncate py-2 font-mono text-[var(--muted-soft)]" title={p.id}>{p.id}</span>
-            <span className="truncate py-2 font-medium" title={p.label}>
-              {p.evidential && <span className="mr-1 text-[var(--muted-soft)]">┄</span>}
-              {p.label}
-            </span>
-            <span className="truncate py-2 text-[var(--muted)]">
-              {classById(p.domain)?.label ?? p.domain}
-              <span className="mx-1.5 text-[var(--muted-soft)]">→</span>
-              {classById(p.range)?.label ?? p.range}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* 3. 공리 */}
-      <SubHead desc="강제하는 코드가 없는 공리는 아직 문서에만 적어 둔 규칙입니다. 남은 하나(원문 확인이 안 된 기준값으로 위법을 단정하지 않기)는 근거 문서와 판정 규칙을 잇는 연결이 아직 없어 코드로 막지 못했습니다.">
-        공리 {AXIOMS.length}종 — 함께 있으면 안 되는 것들의 목록
-      </SubHead>
-      {/*
-       * 폭 캡 없이 전체 폭을 쓴다. 종류·쌍·강제 코드 칸은 내용 폭만큼만(w-px + nowrap)
-       * 차지하고, 설명 칸이 나머지를 전부 받는다 — 예전엔 설명이 좁은 칸에서 세 줄로
-       * 꺾이고 오른쪽에 빈 공간이 넓게 남았다(2026-09-02 지적).
-       */}
-      <table className="mt-2 w-full text-xs">
-        <thead>
-          <tr className="border-b-2 border-[var(--line-strong)] text-left text-2xs font-semibold text-[var(--muted)]">
-            <th className="py-1.5 pr-4 font-semibold">종류</th>
-            <th className="py-1.5 pr-4 font-semibold">함께 있을 수 없는 쌍</th>
-            <th className="py-1.5 pr-4 font-semibold">이유</th>
-            <th className="py-1.5 font-semibold">강제하는 코드</th>
-          </tr>
-        </thead>
-        <tbody>
-          {AXIOMS.map((a, i) => (
-            <tr key={i} className={셀}>
-              <td className="w-px whitespace-nowrap py-2 pr-4 font-mono text-[var(--muted-soft)]">{a.kind}</td>
-              <td className="w-px whitespace-nowrap py-2 pr-4 font-medium">
-                {classById(a.left)?.label ?? a.left}
-                <span className="mx-1.5 text-[var(--muted-soft)]">⊥</span>
-                {classById(a.right)?.label ?? a.right}
-              </td>
-              <td className="py-2 pr-6 leading-relaxed text-[var(--muted)]">{a.why}</td>
-              <td className="w-px whitespace-nowrap py-2">
-                {a.enforcedBy ? (
-                  <span className="font-mono text-2xs text-[var(--accent)]">
-                    {a.enforcedBy}
-                  </span>
-                ) : (
-                  <Pill tone="warn">코드 없음</Pill>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* 4. 실행 A-Box */}
-      <SubHead>이번 실행의 개체 기록 (A-Box)</SubHead>
-      {!abox ? (
-        <EmptyBox>
-          실행 모니터에서 판정을 실행하면 이 실행이 만든 개체 그래프가 여기 나타납니다.
-          발화·후보·국적·판정·금액·기한이 전부 개체가 되고, 검증기가 T-Box 어휘와 공리에
-          대조합니다.
-        </EmptyBox>
-      ) : (
-        <>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <Pill tone="accent">실행 {abox.graph.runId}</Pill>
-            <Pill>개체 {abox.check.counts.individuals}</Pill>
-            <Pill>관계 {abox.check.counts.links}</Pill>
-            {abox.check.violations.length ? (
-              <Pill tone="warn">사전 위반 {abox.check.violations.length}</Pill>
-            ) : (
-              <Pill tone="ok">사전과 어긋난 곳 0</Pill>
-            )}
-          </div>
-          <div className="mt-3 grid gap-x-8 lg:grid-cols-2">
-            <table className="text-xs">
-              <tbody>
-                {분포목록.map(([cls, n]) => (
-                  <tr key={cls} className={셀}>
-                    <td className="py-1.5">{classById(cls)?.label ?? cls}</td>
-                    <td className="py-1.5 font-mono text-2xs text-[var(--muted-soft)]">
-                      {cls}
-                    </td>
-                    <td className="py-1.5 text-right font-mono">{n}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div>
-              {abox.check.violations.length > 0 && (
-                <ul className="rounded border border-[var(--warning)] bg-[var(--warning-soft)] p-3 text-2xs leading-relaxed text-[var(--warning-ink)]">
-                  {abox.check.violations.map((v) => (
-                    <li key={v}>{v}</li>
-                  ))}
-                </ul>
-              )}
-              <p className="text-center text-2xs leading-relaxed text-[var(--muted)]">
-                개체 그래프 전체는 결과 파일 내려받기 화면의 JSON(<code className="font-mono">ontology</code> 섹션)에서 받을 수 있습니다.
-              </p>
-            </div>
-          </div>
-        </>
-      )}
+      <OntologyWorkspace abox={abox} source={source} live={live ? buildLiveOntology(live) : undefined} loop={loop} onOpenConsult={onOpenConsult} />
     </Wrap>
   );
 }

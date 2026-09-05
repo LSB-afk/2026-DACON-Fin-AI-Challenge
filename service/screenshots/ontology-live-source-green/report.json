@@ -1,0 +1,57 @@
+{
+  "startedAt": "2026-09-05T08:30:38.867Z",
+  "baseURL": "http://localhost:3000",
+  "mode": "Controlled browser-only provider fixtures; NOT live inference",
+  "browser": "152.0.7977.82",
+  "tests": [
+    {
+      "name": "knowledge-live-monitor-translation-source",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:30:39.133Z",
+      "finishedAt": "2026-09-05T08:30:41.730Z"
+    },
+    {
+      "name": "knowledge-live-monitor-shared-field-edit",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:30:41.734Z",
+      "finishedAt": "2026-09-05T08:30:44.665Z"
+    },
+    {
+      "name": "knowledge-live-unapplied-revision-isolation",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:30:44.669Z",
+      "finishedAt": "2026-09-05T08:30:48.185Z"
+    }
+  ],
+  "screenshots": [
+    "live-monitor-translation.png"
+  ],
+  "measurements": {},
+  "coverageLimits": [
+    "Controlled responses prove UI behavior; they do not independently prove provider inference or backend translation validation.",
+    "Frame samples measure this browser and viewport only; they are not a universal FPS guarantee."
+  ],
+  "finishedAt": "2026-09-05T08:30:48.189Z",
+  "summary": {
+    "passed": 3,
+    "failed": 0
+  }
+}

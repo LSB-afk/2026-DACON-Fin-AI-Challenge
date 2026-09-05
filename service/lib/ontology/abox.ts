@@ -14,6 +14,9 @@
  * 항상 같은 그래프가 되고, 골든셋이 이 그래프를 통째로 대조할 수 있다.
  *
  * 알려진 한계:
+ *   - 발화 원문은 현재 화면이 이미 가진 문자열을 검사 근거로 같은 메모리 그래프에 그대로
+ *     보존한다. 이 조립기는 저장·로그·전송하지 않으며, 호출자는 기존 입력 보호 절차와 같은
+ *     수명으로 그래프를 다뤄야 한다. 정확한 현재 입력 대조가 목적이라 임의 축약·정규화하지 않는다.
  *   - payslip.size.downgrades(p.size-downgrades) 관계는 아직 잇지 않았다. 어떤 확인필요
  *     판정이 규모 모름 때문인지는 Finding 안에 원인이 없어서, 여기서 다시 추론하면
  *     온톨로지가 코드를 흉내 내는 두 번째 구현이 된다. 원인 필드가 Finding 에 생기면 잇는다.
@@ -112,15 +115,27 @@ export function buildRunABox(ctx: RunContext): ABox {
       class: "utterance.case",
       links: [{ p: "p.case-utters", target: `${runId}#utterance` }],
     });
-    const utt: Individual = { id: `${runId}#utterance`, class: "utterance" };
+    const utt: Individual = {
+      id: `${runId}#utterance`,
+      class: "utterance",
+      values: { "d.utterance-text": ctx.utterance },
+    };
     if (ctx.routes?.length)
       utt.links = ctx.routes.map((_r, i) => ({
         p: "p.routes",
         target: `${runId}#route-${i}`,
       }));
     put(utt);
-    ctx.routes?.forEach((_r, i) => {
-      put({ id: `${runId}#route-${i}`, class: "utterance.candidate" });
+    ctx.routes?.forEach((r, i) => {
+      put({
+        id: `${runId}#route-${i}`,
+        class: "utterance.candidate",
+        values: {
+          "d.route-skill": r.skill,
+          "d.route-score": r.score,
+          "d.route-matched": r.matched,
+        },
+      });
     });
   }
 
@@ -131,17 +146,32 @@ export function buildRunABox(ctx: RunContext): ABox {
     put({
       id: `${runId}#nationality`,
       class: NATIONALITY_CLASS[상태],
+      values: { "d.nationality": d.nationality },
     });
     put({
       id: `${runId}#visa`,
       class: d.visa === "E-9" ? "departure.visa.insured" : "departure.visa",
+      values: { "d.visa": d.visa },
     });
     put({
       id: `${runId}#tenure`,
       class: "departure.tenure",
-      values: { "d.min-tenure": monthsBetween(d.hireDate, d.departureDate) },
+      values: {
+        "d.min-tenure": monthsBetween(d.hireDate, d.departureDate),
+        "d.hire-date": d.hireDate,
+        "d.departure-date": d.departureDate,
+      },
     });
-    put({ id: `${runId}#today`, class: "departure.today" });
+    put({
+      id: `${runId}#today`,
+      class: "departure.today",
+      values: { "d.reference-date": d.today },
+    });
+    put({
+      id: `${runId}#wage`,
+      class: "departure.wage",
+      values: { "d.monthly-wage": d.monthlyWage },
+    });
   }
 
   /* 들어온 것: 사업장 규모 */

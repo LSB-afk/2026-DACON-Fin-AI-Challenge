@@ -1,0 +1,635 @@
+{
+  "startedAt": "2026-09-05T08:31:26.684Z",
+  "baseURL": "http://localhost:3000",
+  "mode": "Controlled browser-only provider fixtures; NOT live inference",
+  "browser": "152.0.7977.82",
+  "tests": [
+    {
+      "name": "lifecycle-1440x900",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:26.955Z",
+      "finishedAt": "2026-09-05T08:31:29.188Z"
+    },
+    {
+      "name": "lifecycle-1920x1080",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:29.193Z",
+      "finishedAt": "2026-09-05T08:31:31.476Z"
+    },
+    {
+      "name": "lifecycle-390x844",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:31.479Z",
+      "finishedAt": "2026-09-05T08:31:32.937Z"
+    },
+    {
+      "name": "partial-request-failure",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:32.940Z",
+      "finishedAt": "2026-09-05T08:31:34.578Z"
+    },
+    {
+      "name": "missing-input-repair-approval-and-revision",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:34.581Z",
+      "finishedAt": "2026-09-05T08:31:36.562Z"
+    },
+    {
+      "name": "translation-success-failure-and-number-rejection",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:36.566Z",
+      "finishedAt": "2026-09-05T08:31:38.708Z"
+    },
+    {
+      "name": "translation-late-response-language-and-input-isolation",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:38.711Z",
+      "finishedAt": "2026-09-05T08:31:40.696Z"
+    },
+    {
+      "name": "late-agent-result-after-edit-and-rerun",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:40.700Z",
+      "finishedAt": "2026-09-05T08:31:42.646Z"
+    },
+    {
+      "name": "explicit-cancel-ignores-late-response",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:42.649Z",
+      "finishedAt": "2026-09-05T08:31:44.243Z"
+    },
+    {
+      "name": "late-agent-result-after-case-switch",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:44.246Z",
+      "finishedAt": "2026-09-05T08:31:45.909Z"
+    },
+    {
+      "name": "source-case-preserved-through-apply-and-reselection",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:45.912Z",
+      "finishedAt": "2026-09-05T08:31:48.861Z"
+    },
+    {
+      "name": "payslip-handoff-preserves-small-workplace",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:48.864Z",
+      "finishedAt": "2026-09-05T08:31:50.775Z"
+    },
+    {
+      "name": "payslip-handoff-preserves-unknown-workplace",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:50.778Z",
+      "finishedAt": "2026-09-05T08:31:52.706Z"
+    },
+    {
+      "name": "offline-provider-is-actionable",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:52.709Z",
+      "finishedAt": "2026-09-05T08:31:54.311Z"
+    },
+    {
+      "name": "network-failure-can-retry",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:54.314Z",
+      "finishedAt": "2026-09-05T08:31:56.211Z"
+    },
+    {
+      "name": "mobile-network-failure-can-retry",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:56.215Z",
+      "finishedAt": "2026-09-05T08:31:57.597Z"
+    },
+    {
+      "name": "geometry-controls-selection-tracking-and-keyboard",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:57.600Z",
+      "finishedAt": "2026-09-05T08:31:59.840Z"
+    },
+    {
+      "name": "reduced-motion-retains-execution-and-approval",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "reduce",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:31:59.843Z",
+      "finishedAt": "2026-09-05T08:32:01.192Z"
+    },
+    {
+      "name": "projected-customer-agent-and-document-picking",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "reduce",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:01.195Z",
+      "finishedAt": "2026-09-05T08:32:02.775Z"
+    },
+    {
+      "name": "moving-packets-follow-walkable-corridors",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:02.778Z",
+      "finishedAt": "2026-09-05T08:32:06.552Z"
+    },
+    {
+      "name": "hidden-visibility-suspends-and-resumes-rendering",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:06.556Z",
+      "finishedAt": "2026-09-05T08:32:08.711Z"
+    },
+    {
+      "name": "static-render-and-interaction-measurements",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:08.715Z",
+      "finishedAt": "2026-09-05T08:32:13.263Z"
+    },
+    {
+      "name": "knowledge-live-growth-1440",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:13.271Z",
+      "finishedAt": "2026-09-05T08:32:15.843Z"
+    },
+    {
+      "name": "knowledge-live-growth-390",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:15.846Z",
+      "finishedAt": "2026-09-05T08:32:18.341Z"
+    },
+    {
+      "name": "knowledge-live-motion-no-preference",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:18.344Z",
+      "finishedAt": "2026-09-05T08:32:20.897Z"
+    },
+    {
+      "name": "knowledge-live-motion-reduce",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "reduce",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:20.906Z",
+      "finishedAt": "2026-09-05T08:32:22.423Z"
+    },
+    {
+      "name": "knowledge-3d-network-1440",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:22.430Z",
+      "finishedAt": "2026-09-05T08:32:24.888Z"
+    },
+    {
+      "name": "knowledge-3d-network-390",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:24.891Z",
+      "finishedAt": "2026-09-05T08:32:27.238Z"
+    },
+    {
+      "name": "knowledge-3d-touch-drag",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:27.242Z",
+      "finishedAt": "2026-09-05T08:32:29.219Z"
+    },
+    {
+      "name": "knowledge-3d-reduced-motion-and-idle",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "reduce",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:29.223Z",
+      "finishedAt": "2026-09-05T08:32:30.711Z"
+    },
+    {
+      "name": "knowledge-3d-hidden-visibility-and-dialog-focus",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:30.722Z",
+      "finishedAt": "2026-09-05T08:32:33.027Z"
+    },
+    {
+      "name": "knowledge-workspace-1440x900",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:33.030Z",
+      "finishedAt": "2026-09-05T08:32:35.153Z"
+    },
+    {
+      "name": "knowledge-workspace-1920x1080",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:35.156Z",
+      "finishedAt": "2026-09-05T08:32:37.316Z"
+    },
+    {
+      "name": "knowledge-workspace-390x844",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:37.319Z",
+      "finishedAt": "2026-09-05T08:32:39.597Z"
+    },
+    {
+      "name": "knowledge-live-monitor-translation-source",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:39.601Z",
+      "finishedAt": "2026-09-05T08:32:42.140Z"
+    },
+    {
+      "name": "knowledge-live-monitor-shared-field-edit",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:42.143Z",
+      "finishedAt": "2026-09-05T08:32:44.890Z"
+    },
+    {
+      "name": "knowledge-live-unapplied-revision-isolation",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:44.894Z",
+      "finishedAt": "2026-09-05T08:32:48.486Z"
+    },
+    {
+      "name": "knowledge-payslip-handoff-judgment-source",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:48.489Z",
+      "finishedAt": "2026-09-05T08:32:53.180Z"
+    },
+    {
+      "name": "knowledge-current-run-values-and-revision",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:53.183Z",
+      "finishedAt": "2026-09-05T08:32:59.234Z"
+    },
+    {
+      "name": "knowledge-directed-relations-and-keyboard",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:32:59.237Z",
+      "finishedAt": "2026-09-05T08:33:01.037Z"
+    },
+    {
+      "name": "knowledge-office-guide-tour-and-perspectives",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:33:01.041Z",
+      "finishedAt": "2026-09-05T08:33:03.278Z"
+    },
+    {
+      "name": "knowledge-mobile-guidance-actions",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:33:03.287Z",
+      "finishedAt": "2026-09-05T08:33:04.602Z"
+    },
+    {
+      "name": "knowledge-natural-staff-motion-and-pause",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "status": "passed",
+      "errors": [],
+      "startedAt": "2026-09-05T08:33:04.605Z",
+      "finishedAt": "2026-09-05T08:33:10.814Z"
+    }
+  ],
+  "screenshots": [
+    "1440x900-overview.png",
+    "1440x900-running.png",
+    "1440x900-approval.png",
+    "1440x900-completed.png",
+    "1920x1080-overview.png",
+    "1920x1080-running.png",
+    "1920x1080-approval.png",
+    "1920x1080-completed.png",
+    "390x844-overview.png",
+    "390x844-running.png",
+    "390x844-approval.png",
+    "390x844-completed.png",
+    "geometry-interaction.png",
+    "reduced-motion-completed.png",
+    "document-inspection-follow.png",
+    "live-1440-running.png",
+    "live-1440-completed.png",
+    "live-390-running.png",
+    "live-390-completed.png",
+    "network-3d-1440-expanded.png",
+    "network-3d-1440-workspace.png",
+    "network-3d-390-expanded.png",
+    "network-3d-390-workspace.png",
+    "knowledge-1440-concepts.png",
+    "knowledge-1440-empty.png",
+    "knowledge-1920-concepts.png",
+    "knowledge-1920-empty.png",
+    "knowledge-390-concepts.png",
+    "knowledge-390-empty.png",
+    "live-monitor-translation.png",
+    "knowledge-payslip-handoff.png",
+    "knowledge-current-accepted-value.png",
+    "office-tour-department.png",
+    "office-mobile-guidance.png",
+    "office-living-staff.png"
+  ],
+  "measurements": {
+    "pathMotion": {
+      "samples": 71,
+      "uniquePositions": 84,
+      "allWithinWalkableFloor": true
+    },
+    "hiddenOffice": {
+      "mode": "headless document.hidden + visibilitychange fixture",
+      "hiddenFrames": 0,
+      "before": 15,
+      "after": 15,
+      "resumedRendering": true
+    },
+    "staticOffice": {
+      "frames": 0,
+      "milliseconds": 702.1999999880791,
+      "averageDrawMs": 4.89
+    },
+    "interaction": {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "sampledFrames": 80,
+      "elapsedMs": 1316.562,
+      "meanFrameIntervalMs": 16.665341772151898,
+      "p95FrameIntervalMs": 16.700000000000273,
+      "maximumFrameIntervalMs": 16.799999999999727,
+      "environment": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+    },
+    "liveMotion-no-preference": {
+      "before": "left: 339.479px; top: 450.04px; z-index: 7;",
+      "after": "left: 339.469px; top: 449.844px; z-index: 7;",
+      "camera": "{\"yaw\":2.8,\"pitch\":0.5,\"zoom\":1.1}",
+      "cameraAfter": "{\"yaw\":2.8,\"pitch\":0.5,\"zoom\":1.1}",
+      "frames": 11
+    },
+    "liveMotion-reduce": {
+      "before": "left: 338.741px; top: 447.407px; z-index: 6;",
+      "after": "left: 338.741px; top: 447.407px; z-index: 6;",
+      "camera": "{\"yaw\":2.8,\"pitch\":0.5,\"zoom\":1.1}",
+      "cameraAfter": "{\"yaw\":2.8,\"pitch\":0.5,\"zoom\":1.1}",
+      "frames": 0
+    },
+    "ontologyReducedMotion": {
+      "idleFrames": 0
+    },
+    "ontologyHidden": {
+      "hiddenFrames": 0,
+      "camera": "{\"yaw\":-0.42,\"pitch\":0.3,\"zoom\":1}",
+      "cameraAfter": "{\"yaw\":-0.42,\"pitch\":0.3,\"zoom\":1}",
+      "mode": "Headless document.hidden + visibilitychange fixture"
+    },
+    "staffMotion": {
+      "samples": 29,
+      "safePositions": 290,
+      "frames": 26,
+      "averageDrawMs": 5.3,
+      "businessRequests": 0
+    },
+    "staffPause": {
+      "stable": true,
+      "frames": 0
+    }
+  },
+  "coverageLimits": [
+    "Controlled responses prove UI behavior; they do not independently prove provider inference or backend translation validation.",
+    "Frame samples measure this browser and viewport only; they are not a universal FPS guarantee."
+  ],
+  "finishedAt": "2026-09-05T08:33:10.818Z",
+  "summary": {
+    "passed": 43,
+    "failed": 0
+  }
+}

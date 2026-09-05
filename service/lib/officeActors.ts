@@ -1,19 +1,11 @@
-/**
- * Fin:AI 운영 도시 — 에이전트·고객의 시각 상태 모델. 순수 함수만.
- *
- * 진실성 규칙(이 파일의 존재 이유):
- *   - 역할 에이전트는 파이프라인 스테이션의 시각적 담당자다. 실제 LLM이 여러 개
- *     동시에 도는 것처럼 그리지 않는다 — working은 언제나 최대 1명이다(테스트 강제).
- *   - 모든 상태는 기존 타임라인(stationStatus)과 실행 컨텍스트에서만 파생된다.
- *     도시 전용 가짜 타이머·가짜 완료는 없다.
- *   - 고객은 배경 장식이 아니라 상담 케이스(caseId)의 시각 표현이다.
- */
-
-import { OFFICE_ROUTE, stationStatus, type StepLike, type OfficeCtx } from "./office.ts";
-
-export type ActorCtx = OfficeCtx & { approvedAt: string | null; applyCheckOk: boolean };
-
-/* ── 역할 에이전트 ── */
+/** Staff, customer and document states derive only from observed requests and accepted results. */
+import { OFFICE_ROUTE, N_TO_ID, stationStatus, type StepLike, type OfficeCtx } from "./office.ts";
+export type ActorCtx = OfficeCtx & {
+  approvedAt: string | null;
+  applyCheckOk: boolean;
+  application?: "idle" | "applied";
+  recordStatus?: "idle" | "completed";
+};
 
 export type AgentRole = {
   /** stable id — 스테이션 id와 1:1 (counselor·records는 흐름 밖 상근) */
@@ -39,189 +31,136 @@ export const AGENT_ROLES: readonly AgentRole[] = [
   { id: "records", role: "기록", name: "기록 관리", station: null, badge: "#91A7C0" },
 ] as const;
 
-export type AgentState =
-  | "idle" | "ready" | "working" | "validating"
-  | "waiting" | "blocked" | "offline" | "completed";
+export type AgentState = "idle" | "ready" | "working" | "validating" | "waiting" | "blocked" | "offline" | "completed";
 
-/**
- * 스테이션별 에이전트 상태 — stationStatus의 재해석 없이 어휘만 옮긴다.
- * 한 POST에 묶인 라우팅·추출이 둘 다 "대기"로 오더라도 working은 경로상
- * 첫 번째 하나뿐이다 — 실제 실행이 직렬이기 때문이다.
- */
-export function agentStates(
-  steps: readonly StepLike[],
-  ctx: ActorCtx,
-): Record<string, AgentState> {
+export function agentStates(steps: readonly StepLike[], ctx: ActorCtx): Record<string, AgentState> {
   const out: Record<string, AgentState> = {};
-  let workingAssigned = false;
   for (const id of OFFICE_ROUTE) {
-    const s = stationStatus(id, steps, ctx);
-    if (s === "대기") {
-      if (!workingAssigned && ctx.busy) {
-        out[id] = "working";
-        workingAssigned = true;
-      } else {
-        // 연결돼 있고 차례를 기다리는 자리 (번역 대기 등)
-        out[id] = "ready";
-      }
-    } else if (s === "완료") out[id] = "completed";
-    else if (s === "차단") out[id] = "blocked";
-    else if (s === "중단") out[id] = "waiting";
-    else if (s === "미연결") out[id] = "offline";
+    const status = stationStatus(id, steps, ctx);
+    if (status === "대기") {
+      const observed = id === "translate" ? ctx.translation?.status === "running"
+        : id === "routing" || id === "extract" ? ctx.requests ? ctx.requests[id].status === "running" : ctx.busy : false;
+      out[id] = observed ? "working" : "ready";
+    } else if (status === "완료") out[id] = "completed";
+    else if (status === "차단") out[id] = "blocked";
+    else if (status === "중단") out[id] = "waiting";
+    else if (status === "미연결") out[id] = "offline";
     else out[id] = "idle";
   }
-  // 상담사: 검토할 것이 있으면 validating, 승인했으면 completed
-  out.counselor = ctx.approvedAt
-    ? "completed"
-    : ctx.hasResult && ctx.applyCheckOk
-      ? "validating"
-      : ctx.hasResult
-        ? "waiting"
-        : "idle";
-  // 기록 관리: 승인 후에만 일이 생긴다
-  out.records = ctx.approvedAt ? "working" : "idle";
+  out.counselor = ctx.approvedAt ? "completed"
+    : ctx.hasResult && ctx.applyCheckOk ? "validating"
+    : ctx.hasResult ? "waiting" : "idle";
+  out.records = ctx.application === "applied" && ctx.recordStatus === "completed" ? "completed"
+    : ctx.approvedAt ? "ready" : "idle";
   return out;
 }
 
-/* ── 도시 전체 집계 (HUD) ── */
-
 export type CityStats = {
-  /** FLOW 스테이션 수 + 1(상담사 승인) */
-  total: number;
-  /** 완료 스테이션 수 (+1 if approvedAt) */
-  done: number;
-  /** working 에이전트 수 (0 또는 1) */
-  running: number;
-  /** ready(차례 대기·번역 대기) 수 */
-  waiting: number;
-  /** 차단+중단 수 */
-  blocked: number;
-  /** 아직 차례 안 온 스테이션 수 + (승인 전이면 1) — 실행 중일 때만 의미 있다 */
-  remaining: number;
-  /** working + validating */
-  activeAgents: number;
-  /** 상담사 검토 대기 또는 중단(입력 보완) 존재 */
-  needsReview: boolean;
-  /** round(done/total*100) */
-  progressPct: number;
+  total: number; done: number; running: number; waiting: number; blocked: number;
+  remaining: number; activeAgents: number; needsReview: boolean; progressPct: number;
 };
 
-/**
- * 도시 HUD가 읽는 단일 집계 — agentStates의 재해석일 뿐, 새 상태를 만들지 않는다.
- */
+function translationRequired(ctx: ActorCtx) {
+  const t = ctx.translation;
+  return !!t && t.status !== "skipped" && t.language !== "ko" && (t.status !== "idle" || !!t.language);
+}
+function active(ctx: ActorCtx) {
+  return ctx.busy || ctx.hasResult || !!ctx.runId || Object.values(ctx.requests ?? {}).some((r) => r.status !== "idle");
+}
+function requiredRoute(ctx: ActorCtx) {
+  return OFFICE_ROUTE.filter((id) => id !== "translate" || translationRequired(ctx));
+}
 export function cityStats(steps: readonly StepLike[], ctx: ActorCtx): CityStats {
   const states = agentStates(steps, ctx);
+  // Required work includes approval and actual application/session record. Optional translation
+  // joins the denominator only when selected; downloading a local copy is never mandatory.
+  const required = [...requiredRoute(ctx), "counselor", "records"];
+  const done = required.filter((id) => states[id] === "completed").length;
   const values = Object.values(states);
-  const routeStates = OFFICE_ROUTE.map((id) => states[id]);
-
-  const total = OFFICE_ROUTE.length + 1;
-  const completedRoute = routeStates.filter((v) => v === "completed").length;
-  const done = completedRoute + (ctx.approvedAt ? 1 : 0);
-  const running = values.filter((v) => v === "working").length;
-  const waiting = values.filter((v) => v === "ready").length;
-  const blocked = values.filter((v) => v === "blocked" || v === "waiting").length;
-  const activeAgents = values.filter((v) => v === "working" || v === "validating").length;
-
-  const active = ctx.busy || ctx.hasResult;
-  const idleRoute = routeStates.filter((v) => v === "idle" || v === "offline").length;
-  const remaining = active ? idleRoute + (ctx.approvedAt ? 0 : 1) : 0;
-
-  const needsReview = (ctx.hasResult && !ctx.approvedAt && ctx.applyCheckOk) || values.includes("waiting");
-
+  const running = values.filter((state) => state === "working").length;
   return {
-    total, done, running, waiting, blocked, remaining, activeAgents, needsReview,
-    progressPct: Math.round((done / total) * 100),
+    total: required.length, done, running,
+    waiting: values.filter((state) => state === "ready").length,
+    blocked: values.filter((state) => state === "blocked" || state === "waiting" || state === "offline").length,
+    remaining: active(ctx) ? required.length - done : 0,
+    activeAgents: running + values.filter((state) => state === "validating").length,
+    needsReview: (ctx.hasResult && !ctx.approvedAt && ctx.applyCheckOk) || values.some((state) => state === "waiting" || state === "blocked"),
+    progressPct: Math.round(done / required.length * 100),
   };
 }
 
-/* ── 고객 여정 ── */
-
-export type CustomerState =
-  | "queued" | "consulting" | "waiting-for-processing"
-  | "waiting-for-approval" | "receiving-result" | "completed" | "blocked";
-
-/**
- * 활성 고객(선택된 케이스)의 여정 — 실행 컨텍스트의 순수 함수.
- * 시스템은 한 번에 한 건만 처리한다 — 활성 고객은 언제나 한 명이다.
- */
+export type CustomerState = "queued" | "consulting" | "waiting-for-processing" | "waiting-for-approval" | "receiving-result" | "completed" | "blocked";
 export function customerJourney(steps: readonly StepLike[], ctx: ActorCtx): CustomerState {
-  if (!ctx.busy && !ctx.hasResult) return "consulting";
-  if (ctx.busy) return "waiting-for-processing";
+  if (!active(ctx)) return "consulting";
+  const states = agentStates(steps, ctx);
+  if (Object.values(states).includes("blocked")) return "blocked";
+  if (ctx.busy || ctx.translation?.status === "running") return "waiting-for-processing";
+  if (cityStats(steps, ctx).progressPct === 100) return "completed";
   if (ctx.approvedAt) return "receiving-result";
-  const 첫비정상 = OFFICE_ROUTE.find((id) => {
-    const s = stationStatus(id, steps, ctx);
-    return s === "차단" || s === "중단";
-  });
-  if (첫비정상) {
-    const s = stationStatus(첫비정상, steps, ctx);
-    // 중단(값 부족)은 상담사가 보완하면 회복 — 보완되면 승인 대기로 넘어간다
-    if (s === "차단" || !ctx.applyCheckOk) return "blocked";
-  }
+  if (!ctx.applyCheckOk) return "blocked";
   return "waiting-for-approval";
 }
-
-/** 여정 상태 → 고객이 향하는 자리 이름 (좌표는 officeWorld가 안다) */
+/** Customers stay in the consultation hub; officeWorld locates the semantic seats. */
 export function customerDest(state: CustomerState): string {
   switch (state) {
     case "queued": return "plaza";
     case "consulting": return "consulting";
     case "waiting-for-processing": return "waitingProcessing";
-    case "blocked": return "waitingProcessing"; // 접수 옆에서 되묻기를 기다린다
+    case "blocked": return "waitingProcessing";
     case "waiting-for-approval": return "waitingApproval";
     case "receiving-result": return "receivingResult";
     case "completed": return "exited";
   }
 }
 
-/* ── 문서(데이터 패킷) ── */
-
-/**
- * 문서의 현재 목적지 — 실행이 어디까지 왔는지의 공간 표현.
- * 승인 전에는 절대 게이트로 가지 않는다(승인 게이트 계약).
- */
 export function docDest(steps: readonly StepLike[], ctx: ActorCtx): string | null {
-  if (!ctx.busy && !ctx.hasResult) return null; // 아직 문서가 없다
+  if (!active(ctx)) return null;
+  if (ctx.application === "applied") return "records";
   if (ctx.approvedAt) return "gate";
-  if (ctx.busy) {
-    const running = OFFICE_ROUTE.find((id) => stationStatus(id, steps, ctx) === "대기");
-    return running ?? "routing";
-  }
-  const 첫비정상 = OFFICE_ROUTE.find((id) => {
-    const s = stationStatus(id, steps, ctx);
-    return s === "차단" || s === "중단";
-  });
-  if (첫비정상) {
-    const s = stationStatus(첫비정상, steps, ctx);
-    if (s === "차단" || !ctx.applyCheckOk) return 첫비정상;
-  }
-  return "counselor"; // 처리 끝 — 승인 창구 앞에서 대기
+  const states = agentStates(steps, ctx);
+  const working = requiredRoute(ctx).find((id) => states[id] === "working");
+  if (working) return working;
+  if (documentTransfers(steps, ctx).some((transfer) => transfer.to === "input")) return "input";
+  const blocked = requiredRoute(ctx).find((id) => states[id] === "blocked" || states[id] === "waiting");
+  if (blocked) return blocked;
+  if (ctx.busy) return "input";
+  return "counselor";
 }
 
-/** 결과 전달 게이트 — 승인 전 잠김, 승인 후 열림. 승인 해제면 다시 잠긴다 */
-export function gateOpen(ctx: ActorCtx): boolean {
-  return !!ctx.approvedAt;
+export type DocumentTransfer = { id: string; from: string; to: string; label: string };
+/** Independent requests have independent packets. Completed transfer animation never means running. */
+export function documentTransfers(steps: readonly StepLike[], ctx: ActorCtx): DocumentTransfer[] {
+  const states = agentStates(steps, ctx);
+  const transfers: DocumentTransfer[] = [];
+  for (const id of ["routing", "extract"] as const) {
+    if (states[id] === "working") transfers.push({ id: (ctx.runId ?? "run") + ":" + id, from: "input", to: id, label: id === "routing" ? "업무 분류 요청" : "상담 정보 확인" });
+  }
+  if (states.translate === "working") transfers.push({ id: (ctx.runId ?? "run") + ":translate", from: "narrate", to: "translate", label: "검증된 답변 번역" });
+  if (!transfers.length && ctx.hasResult && !ctx.busy && !ctx.approvedAt && !ctx.applyCheckOk && !Object.values(states).includes("blocked")) {
+    // A stopped input-dependent stage asks the central consultation desk for missing values.
+    // Hard request/contract failures stay at their failed department and are not relabeled.
+    const stopped = steps.find((step) => step.status === "중단" && ["extract", "judge"].includes(N_TO_ID[step.n]));
+    if (stopped) transfers.push({
+      id: (ctx.runId ?? "run") + ":supplement:" + (ctx.inputRevision ?? 0) + ":" + N_TO_ID[stopped.n],
+      from: N_TO_ID[stopped.n], to: "input",
+      label: "입력 보완 요청 · " + (stopped.detail?.trim() || stopped.label + " 입력 확인이 필요합니다."),
+    });
+  }
+  if (!transfers.length && ctx.hasResult && !ctx.approvedAt && ctx.applyCheckOk) transfers.push({ id: (ctx.runId ?? "run") + ":review", from: "narrate", to: "counselor", label: "결과 검토 요청" });
+  return transfers;
 }
 
-/** 상태 바·live region용 현재 단계 한 줄 */
-export function currentStageLabel(
-  steps: readonly StepLike[],
-  ctx: ActorCtx,
-  stationName: (id: string) => string,
-): string {
-  if (!ctx.busy && !ctx.hasResult) return "대기 전 — 상담 입력";
-  if (ctx.busy) {
-    const running = OFFICE_ROUTE.find((id) => stationStatus(id, steps, ctx) === "대기");
-    return running ? `진행 중 — ${stationName(running)}` : "진행 중";
-  }
-  if (ctx.approvedAt) return "승인 완료 — 결과 전달";
-  const 첫비정상 = OFFICE_ROUTE.find((id) => {
-    const s = stationStatus(id, steps, ctx);
-    return s === "차단" || s === "중단";
-  });
-  if (첫비정상) {
-    const s = stationStatus(첫비정상, steps, ctx);
-    if (s === "차단") return `차단 — ${stationName(첫비정상)}`;
-    if (!ctx.applyCheckOk) return `입력 보완 필요 — ${stationName(첫비정상)}`;
-  }
+export function gateOpen(ctx: ActorCtx): boolean { return !!ctx.approvedAt; }
+export function currentStageLabel(steps: readonly StepLike[], ctx: ActorCtx, stationName: (id: string) => string): string {
+  if (!active(ctx)) return "대기 전 — 상담 입력";
+  const states = agentStates(steps, ctx);
+  const working = OFFICE_ROUTE.filter((id) => states[id] === "working");
+  if (working.length) return "요청 진행 중 — " + working.map(stationName).join(" · ");
+  const failed = OFFICE_ROUTE.find((id) => states[id] === "blocked");
+  if (failed) return (failed === "translate" ? "번역 확인 필요 — " : "차단 — ") + stationName(failed);
+  if (ctx.busy) return "상담 요청 접수 중";
+  if (cityStats(steps, ctx).progressPct === 100) return "상담 완료 — 결과 적용·기록 완료";
+  if (ctx.approvedAt) return "승인 완료 — 결과 전달 대기";
+  if (!ctx.applyCheckOk) return "입력 보완 필요 — 상담 정보 확인";
   return "상담사 승인 대기";
 }

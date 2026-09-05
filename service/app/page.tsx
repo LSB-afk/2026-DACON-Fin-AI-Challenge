@@ -16,7 +16,7 @@
  *   4. 근거 문서의 검증 상태 — 2차 출처가 남아 있다는 사실을 그대로 띄운다
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cases, getCase, type Case } from "@/lib/cases";
 import { routeByKeyword, needsClarification, getSkill } from "@/lib/skills";
 import { judgePayslip, type Payslip, type WorkplaceSize } from "@/lib/rules/payslip";
@@ -34,8 +34,11 @@ import {
 import { checkAllGuardrails, GUARDRAIL_CATALOG } from "@/lib/harness/guardrails";
 import "@/lib/harness/registry"; // import 자체가 manifest 등록이다
 import { buildRunABox, validateABox } from "@/lib/ontology/abox";
+import { selectOntologySource } from "@/lib/ontology/source";
 import { narrate, type Answer } from "@/lib/narrate";
 import { 언어들 } from "@/lib/ai/contract";
+import { createTranslationRequests, translationFailureStatus } from "@/lib/translationLifecycle";
+import type { OfficeCtx } from "@/lib/office";
 import { UI_LANGS, entranceText, isUiLang, uiLangInfo, type UiLang } from "@/lib/uiLang";
 import { Flag } from "./_flags";
 import { UiTranslator, type TranslatorStatus } from "./_uiTranslator";
@@ -59,7 +62,7 @@ import {
   type ViewId,
   type NavGroupId,
 } from "./_ui";
-import { useAgentLoop } from "./_agent-core";
+import { useAgentLoop, type ApplyPayload, type IntakeFields } from "./_agent-core";
 import { AgentChatDrawer } from "./_chat";
 import { Paygent } from "./_paygent";
 import { nextQuest, progress, boardRows, progressBar, celebrationMessage, GOALS, goalById, type Goal, type PaygentState } from "@/lib/paygent";
@@ -244,6 +247,9 @@ export default function Console() {
   );
   const [wage, setWage] = useState(c.departure?.monthlyWage ?? 2_150_000);
   const [size, setSize] = useState<WorkplaceSize>(c.workplaceSize ?? "5인이상");
+  const [linkedAgentRunId, setLinkedAgentRunId] = useState<string | null>(null);
+  const [linkedAgentRevision, setLinkedAgentRevision] = useState<number | null>(null);
+  const [appliedUtterance, setAppliedUtterance] = useState<string | null>(null);
 
   /**
    * 급여명세서 편집본 — 고정 샘플 의존 제거 (2026-08-28).
@@ -285,8 +291,19 @@ export default function Console() {
   ) => setPayslipDraft((d) => ({ ...d, hours: { ...d.hours, [hk]: v } }));
 
   /** known — 방금 만든 케이스는 아직 상태에 없으므로 직접 넘긴다 */
-  function selectCase(id: string, known?: Case) {
+  function selectCase(id: string, reload = false, known?: Case) {
+    if (id === caseId && casePicked && !reload) return;
     const n = known ?? findCase(id);
+    translationRequests.cancel();
+    setTranslationResult(null);
+    if (id === caseId) agentLoop.cancel();
+    else agentLoop.resetCase(id);
+    agentLoop.setUtterance(n.utterance);
+    setLinkedAgentRunId(null);
+    setLinkedAgentRevision(null);
+    setAppliedUtterance(null);
+    setPendingAgentApply(null);
+    autoRunHandled.current = autoRun;
     setCaseId(id);
     setCasePicked(true);
     setRan(false);
@@ -320,7 +337,7 @@ export default function Console() {
       source: "user",
     };
     setUserCase(uc);
-    selectCase(uc.id, uc);
+    selectCase(uc.id, true, uc);
   }
 
   /* 큐에 보이는 것 — 사용자 케이스 + (목록·시나리오에서 고른) 현재 케이스. 중복은 하나로 */
@@ -329,7 +346,8 @@ export default function Console() {
     ...(casePicked && c.id !== userCase?.id ? [c] : []),
   ];
 
-  const routes = useMemo(() => routeByKeyword(c.utterance), [c.utterance]);
+  const monitorUtterance = appliedUtterance ?? c.utterance;
+  const routes = useMemo(() => routeByKeyword(monitorUtterance), [monitorUtterance]);
   const 모호 = needsClarification(routes);
   const skillId = routes[0]?.skill.id ?? null;
   const skill = skillId ? getSkill(skillId) : null;
@@ -362,6 +380,15 @@ export default function Console() {
     size, payslipDraft,
   ]);
   const findings: Finding[] = ran ? computed : 실행전;
+  // Monitor edits and AI intake edits have distinct scopes. Track all actual judgment
+  // inputs, including manual line items/hours, without persisting or logging their values.
+  const monitorInputKey = JSON.stringify([caseId, monitorUtterance, skillId, skillId === "payslip"
+    ? [payslipDraft, size, today]
+    : [nationality, visa, hireDate, departureDate, wage, today]]);
+  const [monitorVersion, setMonitorVersion] = useState({ key: monitorInputKey, revision: 0 });
+  if (monitorVersion.key !== monitorInputKey) {
+    setMonitorVersion({ key: monitorInputKey, revision: monitorVersion.revision + 1 });
+  }
 
   /** 가드레일은 순수 함수라 입력이 바뀌면 즉시 다시 계산된다 (기록은 실행 시에만) */
   const guardViolations = useMemo(
@@ -379,7 +406,7 @@ export default function Console() {
     if (!ran || !skillId || !findings.length) return null;
     const g = buildRunABox({
       caseId: c.id,
-      utterance: c.utterance,
+      utterance: monitorUtterance,
       routes: routes.map((r) => ({
         skill: r.skill.name,
         score: r.score,
@@ -395,7 +422,7 @@ export default function Console() {
     });
     return { graph: g, check: validateABox(g) };
   }, [
-    ran, skillId, findings, c.id, c.utterance, routes,
+    ran, skillId, findings, c.id, monitorUtterance, routes,
     nationality, visa, hireDate, departureDate, wage, today, size,
   ]);
 
@@ -443,40 +470,56 @@ export default function Console() {
    */
   const agentLoop = useAgentLoop({
     today,
+    initialCaseId: caseId,
     onModelCalls: (calls, meta) =>
       calls.forEach((c) =>
         호출기록({ ...c, provider: meta.provider, model: meta.model }),
       ),
   });
   const agentProvider = agentLoop.provider;
+  // The office and ontology inspect the exact same accepted input version. A new/blocked
+  // AI request must not silently show an older monitor judgment as its current graph.
+  const { abox: ontologyABox, source: ontologySource } = selectOntologySource({
+    caseId, monitor: abox, monitorRevision: monitorVersion.revision, linkedRunId: linkedAgentRunId, linkedRevision: linkedAgentRevision,
+    agent: { caseId: agentLoop.caseId, runId: agentLoop.runId, inputRevision: agentLoop.inputRevision,
+      busy: agentLoop.busy, hasResult: !!agentLoop.result, skillId: agentLoop.finalSkillId, ontology: agentLoop.ontology },
+  });
   const [chatOpen, setChatOpen] = useState(false);
 
-  const [lang, setLang] = useState<TranslateState["lang"]>("ko");
-  const [transDone, setTransDone] = useState<TranslateState["done"]>(null);
-  const [transBusy, setTransBusy] = useState(false);
-  const [transError, setTransError] = useState<string | null>(null);
-
-  /* 답변이 바뀌면(다른 상담·재실행) 이전 번역은 다른 판정의 번역이다 — 즉시 무효.
-     이펙트가 아니라 렌더 중 조정 패턴을 쓴다 — 한 프레임짜리 낡은 번역 표시와
-     계단식 렌더를 둘 다 없앤다 (react.dev: adjusting state during render). */
-  const [prevAnswer, setPrevAnswer] = useState<Answer | null>(answer);
-  if (prevAnswer !== answer) {
-    setPrevAnswer(answer);
-    setLang("ko");
-    setTransDone(null);
-    setTransError(null);
-  }
+  const [translationRequests] = useState(createTranslationRequests);
+  const translationAnswer = view === "ontology"
+    ? ontologySource.kind === "agent" ? agentLoop.finalAnswer : answer
+    : view === "agent-run" || (agentLoop.approvedAt && !ran) ? agentLoop.finalAnswer : answer;
+  const translationScope = JSON.stringify([caseId, agentLoop.runId, agentLoop.inputRevision, translationAnswer]);
+  const [translationResult, setTranslationResult] = useState<{
+    scope: string; lang: TranslateState["lang"]; done: TranslateState["done"];
+    status: NonNullable<OfficeCtx["translation"]>["status"]; error: string | null;
+  } | null>(null);
+  // A changed case/run/revision/answer is hidden immediately, before effect cleanup.
+  const currentTranslation = translationResult?.scope === translationScope ? translationResult : null;
+  const lang = currentTranslation?.lang ?? "ko";
+  const transDone = currentTranslation?.done ?? null;
+  const transBusy = currentTranslation?.status === "running";
+  const transError = currentTranslation?.error ?? null;
+  useLayoutEffect(() => () => translationRequests.cancel(), [translationScope, translationRequests]);
 
   function requestLang(code: TranslateState["lang"]) {
-    setLang(code);
-    setTransError(null);
-    if (code === "ko" || !answer) return;
-    if (transDone?.lang === code) return; // 같은 답변·같은 언어는 다시 부르지 않는다
-    setTransBusy(true);
+    translationRequests.cancel();
+    if (code === "ko" || !translationAnswer) {
+      setTranslationResult({ scope: translationScope, lang: "ko", done: null, status: translationAnswer ? "skipped" : "idle", error: null });
+      return;
+    }
+    if (transDone?.lang === code) {
+      setTranslationResult({ scope: translationScope, lang: code, done: transDone, status: "completed", error: null });
+      return;
+    }
+    const token = translationRequests.begin(translationScope);
+    setTranslationResult({ scope: translationScope, lang: code, done: null, status: "running", error: null });
     fetch("/api/narrate", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ answer, lang: code }),
+      body: JSON.stringify({ answer: translationAnswer, lang: code }),
+      signal: token.controller.signal,
     })
       .then(async (r) => {
         const j = await r.json();
@@ -490,14 +533,16 @@ export default function Console() {
           note: r.ok ? undefined : j.error,
           ...(j.usage ?? {}),
         });
+        if (!translationRequests.isCurrent(token)) return;
         if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
-        setTransDone({ lang: code, answer: j.answer as Answer, model: j.model });
+        setTranslationResult({ scope: translationScope, lang: code, done: { lang: code, answer: j.answer as Answer, model: j.model }, status: "completed", error: null });
       })
       .catch((e) => {
         // 실패는 원문 폴백 — 이유를 화면에 그대로 적는다. 조용한 실패가 최악이다
-        setTransError(e instanceof Error ? e.message : String(e));
-      })
-      .finally(() => setTransBusy(false));
+        if (!translationRequests.isCurrent(token)) return;
+        const message = e instanceof Error ? e.message : String(e);
+        setTranslationResult({ scope: translationScope, lang: code, done: null, status: translationFailureStatus(message), error: message });
+      });
   }
 
   const translateState: TranslateState = {
@@ -506,6 +551,11 @@ export default function Console() {
     busy: transBusy,
     error: transError,
     provider,
+  };
+  const officeTranslation: NonNullable<OfficeCtx["translation"]> = {
+    status: currentTranslation?.status ?? (translationAnswer ? "skipped" : "idle"),
+    language: lang,
+    detail: transError ? `${currentTranslation?.status === "rejected" ? "번역 검증 실패" : "번역 요청 실패"} · 한국어 원문 유지: ${transError}` : lang === "ko" ? "한국어 원문 사용 · 번역 불필요" : transBusy ? "번역 요청 중 · 금액과 날짜 검증 후 표시" : transDone ? "번역과 숫자 보존 검증 완료" : undefined,
   };
 
   // ── 페이전트 세션 기억 (입장 스킵, 최소화) ──
@@ -546,7 +596,7 @@ export default function Console() {
     setView(v);
   }
 
-  const steps: Step[] = useMemo(() => {
+  const steps: Step[] = (() => {
     if (!ran) return [];
     const llmLive = !!agentProvider?.provider;
     const s: Step[] = [
@@ -604,44 +654,24 @@ export default function Console() {
             `용어 사전(T-Box)과 대조했습니다. 어긋난 곳이 없습니다.`
         : "판정 결과가 없어 개체 그래프를 만들지 않았습니다.",
     });
-    /*
-     * 3단은 넷 중 하나다 — 상태를 지어내지 않고 실제 배선에서 읽는다:
-     *   미연결: 제공자 없음(키·URL 미설정). 조립(한국어)은 그래도 돈다.
-     *   대기:   제공자 연결됨, 아직 번역을 누르지 않음.
-     *   완료:   번역이 숫자 보존 검증까지 통과해 화면에 나감.
-     *   차단:   모델이 계약(줄 형식·숫자 보존)을 어겨 원문 폴백 — 가드가 일한 것이다.
-     */
-    const 언어명 = 언어들.find((l) => l.code === lang)?.name;
+    // Korean composition and an optional translation have independent completion states.
     s.push({
       n: "3단",
       label: "설명",
-      status: !provider?.provider
-        ? "미연결"
-        : transError
-          ? "차단"
-          : transDone && lang !== "ko"
-            ? "완료"
-            : "대기",
-      detail: !provider?.provider
-        ? "한국어 답변은 코드가 이미 만들었습니다. 번역 서비스만 연결되지 않았습니다. " +
-          "서버에 ANTHROPIC_API_KEY 또는 OLLAMA_URL을 설정하면 이 단계가 열립니다."
-        : transError
-          ? `번역이 확인을 통과하지 못해 한국어 원문을 보여 줍니다: ${transError}`
-          : transDone && lang !== "ko"
-            ? `${언어명} 번역을 마쳤습니다 (${transDone.model}). 금액, 날짜, 조문이 원문과 같은지 확인했습니다.`
-            : `번역 서비스가 연결되어 있습니다 (${provider.provider}:${provider.model}). 답변 탭에서 언어를 고르면 번역하고, ` +
-              "금액과 날짜가 원문과 같은지 확인한 뒤 보여 줍니다.",
+      status: answer ? "완료" : "중단",
+      detail: answer ? `한국어 답변 조립 완료 · ${answer.headline}` : "판정 결과가 준비되면 한국어 답변을 만듭니다.",
     });
     return s;
-  }, [
-    ran, routes, skillId, skill, findings.length, guardViolations, abox,
-    provider, lang, transDone, transError, agentProvider,
-  ]);
+  })();
 
   const totals = moneyTotals(findings);
   const vc = verifyCounts();
 
-  function run() {
+  function run(preserveTranslation = false) {
+    if (!preserveTranslation) {
+      translationRequests.cancel();
+      setTranslationResult(null);
+    }
     setRan(true);
     setTab("findings");
     // 원장과 훅은 화면용 findings(실행 게이트)가 아니라 클릭 시점의 계산값을 쓴다 —
@@ -659,7 +689,7 @@ export default function Console() {
       {
         seq: prev.length + 1,
         caseId: c.id,
-        utterance: c.utterance,
+        utterance: monitorUtterance,
         skill: skill?.name ?? "라우팅 실패",
         findings: 지금.length,
         ...(() => {
@@ -704,16 +734,26 @@ export default function Console() {
    * 판정한다. 순번을 하나 올리고, 새 값으로 그려진 뒤의 렌더에서 실행한다.
    */
   const [autoRun, setAutoRun] = useState(0);
+  const autoRunHandled = useRef(0);
+  const [pendingAgentApply, setPendingAgentApply] = useState<{ caseId: string; runId: string | null; revision: number } | null>(null);
   useEffect(() => {
-    if (autoRun === 0) return;
+    if (autoRun === 0 || autoRunHandled.current === autoRun) return;
     // 새 값으로 그려진 프레임 뒤에 실행한다 — 동기 실행은 계단식 렌더가 된다
-    const id = requestAnimationFrame(() => run());
+    const id = requestAnimationFrame(() => {
+      autoRunHandled.current = autoRun;
+      if (pendingAgentApply && (pendingAgentApply.caseId !== caseId || pendingAgentApply.runId !== agentLoop.runId || pendingAgentApply.revision !== agentLoop.inputRevision || !agentLoop.approvedAt)) return;
+      run(!!pendingAgentApply);
+      if (pendingAgentApply) {
+        agentLoop.markApplied();
+        setPendingAgentApply(null);
+      }
+    });
     return () => cancelAnimationFrame(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRun]);
+  }, [autoRun, pendingAgentApply, caseId, agentLoop.runId, agentLoop.inputRevision, agentLoop.approvedAt]);
 
   function applyScenario(p: ScenarioPreset) {
-    selectCase(p.caseId);
+    selectCase(p.caseId, true);
     if (p.today) setToday(p.today);
     if (p.nationality) setNationality(p.nationality);
     if (p.visa) setVisa(p.visa);
@@ -723,6 +763,50 @@ export default function Console() {
     if (p.size) setSize(p.size);
     setView("monitor");
     setAutoRun((v) => v + 1);
+  }
+
+  function applyAgentResult(p: ApplyPayload) {
+    // Approval changes the current consultation's inputs, never its customer identity.
+    setCasePicked(true);
+    setAppliedUtterance(agentLoop.result?.utterance ?? agentLoop.utterance);
+    setLinkedAgentRunId(agentLoop.runId);
+    setLinkedAgentRevision(agentLoop.inputRevision);
+    setRan(false);
+    if (p.today !== undefined) setToday(p.today);
+    if (agentLoop.finalSkillId === "payslip") {
+      if (p.size !== undefined) setSize(p.size);
+      setView("monitor");
+      setTab("input");
+      setPropsOpen(true);
+      return;
+    }
+    if (p.nationality !== undefined) setNationality(p.nationality);
+    if (p.visa !== undefined) setVisa(p.visa);
+    if (p.hireDate !== undefined) setHireDate(p.hireDate);
+    if (p.departureDate !== undefined) setDepartureDate(p.departureDate);
+    if (p.wage !== undefined) setWage(p.wage);
+    setPendingAgentApply({ caseId, runId: agentLoop.runId, revision: agentLoop.inputRevision });
+    setAutoRun((v) => v + 1);
+    if (view !== "agent-run") setView("monitor");
+  }
+
+  function invalidateAppliedResult(field?: keyof IntakeFields | "today", value?: string | number) {
+    translationRequests.cancel();
+    setTranslationResult(null);
+    if (linkedAgentRunId && linkedAgentRunId === agentLoop.runId) {
+      const synchronizedHandoff = linkedAgentRevision === agentLoop.inputRevision;
+      if (field === "today") {
+        if (typeof value === "string" && value && value !== agentLoop.todayInput) {
+          agentLoop.setTodayInput(value);
+          if (synchronizedHandoff) setLinkedAgentRevision(agentLoop.inputRevision + 1);
+        }
+      } else if (field) {
+        agentLoop.editField(field, value);
+        // This handler transfers the same field into both views. A plain rejudge
+        // or an earlier unapplied consultation edit must never advance this link.
+        if (synchronizedHandoff) setLinkedAgentRevision(agentLoop.inputRevision + 1);
+      } else agentLoop.setApprovedAt(null);
+    }
   }
 
   /* ── 페이전트 퀘스트 플래그 — 실제 사용자 행동(화면·탭 도달)에서만 세운다 ──
@@ -785,7 +869,7 @@ export default function Console() {
   const latestJson = JSON.stringify(
     {
       case: c.id,
-      utterance: c.utterance,
+      utterance: monitorUtterance,
       today,
       findings,
       // 실행의 A-Box — 이 결과가 T-Box 어휘로만 쓰였다는 증명이 함께 나간다
@@ -965,7 +1049,9 @@ export default function Console() {
   /* 페이전트 동행 모드 — 콘솔 전 화면 상주. ✕는 최소화(도킹 아이콘)로만 줄어든다.
      운영 도시(agent-run)에서는 자동 도킹 — 화면의 1순위는 도시고, 페이전트는
      보조다. 아이콘을 누르면 메뉴가 그 자리에서 열린다 (말풍선은 상태 바가 대신한다). */
-  const cityDock = view === "agent-run";
+  // Dedicated workspace guidance owns the explanation here; an unrelated monitor
+  // quest bubble must not cover graph controls or imply that this run needs execution.
+  const cityDock = view === "agent-run" || view === "ontology";
   const companionUi = !entrance && (
     <div
       ref={pgWrapRef}
@@ -1165,7 +1251,7 @@ export default function Console() {
           }}
           onApply={(p) => {
             setChatOpen(false);
-            applyScenario(p);
+            applyAgentResult(p);
           }}
         />
       )}
@@ -1393,7 +1479,10 @@ export default function Console() {
               loop={wrappedAgentLoop}
               caseId={caseId}
               onSelectCase={selectCase}
-              onApply={applyScenario}
+              onApply={applyAgentResult}
+              translation={officeTranslation}
+              translateState={translateState}
+              onTranslate={requestLang}
               onNavigate={(v, t) => {
                 setView(v as ViewId);
                 if (t) setTab(t as MonitorTab);
@@ -1416,7 +1505,10 @@ export default function Console() {
           {view === "standards-map" && <StandardsMapView />}
           {view === "golden" && <GoldenView />}
           {view === "skills" && <SkillsView />}
-          {view === "ontology" && <OntologyView abox={abox} />}
+          {view === "ontology" && <OntologyView abox={ontologyABox} source={ontologySource}
+            live={{ caseId, monitorRevision: monitorVersion.revision, agent: agentLoop, abox: ontologyABox, translation: officeTranslation,
+              monitor: ontologySource.kind === "monitor" && ontologyABox ? { steps, answer } : undefined }}
+            loop={wrappedAgentLoop} onOpenConsult={() => setChatOpen(true)} />}
           {view === "org" && (
             <OrgView narratorLive={!!provider?.provider} agentLive={!!agentProvider?.provider} agentModel={agentProvider?.model} />
           )}
@@ -1534,7 +1626,7 @@ export default function Console() {
 
         {casePicked && (
         <div className="border-b border-[var(--line)] px-4 pb-4 pt-5 min-[1024px]:px-8">
-          <h1 className="text-2xl font-bold tracking-tight">{c.utterance}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{monitorUtterance}</h1>
           <p className="mt-1.5 max-w-3xl text-sm leading-relaxed text-[var(--muted)]">
             {c.summary}
           </p>
@@ -1705,7 +1797,7 @@ export default function Console() {
                 value={today}
                 /* 날짜 칸을 비우면 값이 빈 문자열로 온다. 그대로 넘기면 판정이 던져
                    화면이 통째로 죽는다. 빈 값은 무시하고 직전 기준일을 유지한다. */
-                onChange={(e) => e.target.value && setToday(e.target.value)}
+                onChange={(e) => { if (e.target.value) { invalidateAppliedResult("today", e.target.value); setToday(e.target.value); } }}
                 className={`mt-1 ${필드}`}
               />
             </label>
@@ -1719,7 +1811,7 @@ export default function Console() {
                   국적
                   <select
                     value={nationality}
-                    onChange={(e) => setNationality(e.target.value)}
+                    onChange={(e) => { invalidateAppliedResult("nationality", e.target.value); setNationality(e.target.value); }}
                     className={`mt-1 ${필드}`}
                   >
                     {getSkill("departure")
@@ -1733,7 +1825,7 @@ export default function Console() {
                   체류자격
                   <select
                     value={visa}
-                    onChange={(e) => setVisa(e.target.value as Visa)}
+                    onChange={(e) => { invalidateAppliedResult("visa", e.target.value); setVisa(e.target.value as Visa); }}
                     className={`mt-1 ${필드}`}
                   >
                     {["E-9", "H-2", "E-8", "기타"].map((v) => (
@@ -1747,7 +1839,7 @@ export default function Console() {
                     <input
                       type="date"
                       value={hireDate}
-                      onChange={(e) => setHireDate(e.target.value)}
+                      onChange={(e) => { invalidateAppliedResult("hireDate", e.target.value); setHireDate(e.target.value); }}
                       className={`mt-1 ${필드}`}
                     />
                   </label>
@@ -1756,7 +1848,7 @@ export default function Console() {
                     <input
                       type="date"
                       value={departureDate}
-                      onChange={(e) => setDepartureDate(e.target.value)}
+                      onChange={(e) => { invalidateAppliedResult("departureDate", e.target.value); setDepartureDate(e.target.value); }}
                       className={`mt-1 ${필드}`}
                     />
                   </label>
@@ -1766,7 +1858,7 @@ export default function Console() {
                   <input
                     type="number"
                     value={wage}
-                    onChange={(e) => setWage(Number(e.target.value))}
+                    onChange={(e) => { invalidateAppliedResult("monthlyWage", Number(e.target.value)); setWage(Number(e.target.value)); }}
                     className={`mt-1 ${필드}`}
                   />
                 </label>
@@ -1779,7 +1871,7 @@ export default function Console() {
                   상시 근로자 수 · A7 분기
                   <select
                     value={size}
-                    onChange={(e) => setSize(e.target.value as WorkplaceSize)}
+                    onChange={(e) => { invalidateAppliedResult("workplaceSize", e.target.value); setSize(e.target.value as WorkplaceSize); }}
                     className={`mt-1 ${필드}`}
                   >
                     {["5인이상", "모름", "5인미만"].map((s) => (
@@ -1872,7 +1964,7 @@ export default function Console() {
               {harness?.verification.goldenCases ?? 0}건. 자동 테스트와 같은 사례입니다
             </p>
             <button
-              onClick={run}
+              onClick={() => run()}
               className="mt-3 w-full rounded-lg bg-[var(--accent)] py-2.5 text-sm font-semibold text-white hover:bg-[var(--accent-hover)] motion-press"
             >
               이 브라우저에서 재판정
