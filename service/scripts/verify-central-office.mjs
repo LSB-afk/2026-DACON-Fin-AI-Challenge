@@ -125,6 +125,16 @@ async function returnOffice(page) {
   else { await page.getByRole("button", { name: /급여 판정/ }).click(); await nav.click(); }
   await page.getByTestId("office-map").waitFor({ state: "visible" });
 }
+async function openOrganization(page) {
+  await closeOps(page);
+  const item = page.locator('nav button').filter({ hasText: /^AI 역할 (분담|조직도)$/ });
+  const compact = page.getByTitle(/^AI 역할 (분담|조직도) \(/);
+  if (await compact.isVisible()) await compact.click();
+  else {
+    if (!await item.isVisible()) await page.getByRole("button", { name: /운영·관리/ }).click();
+    await item.click();
+  }
+}
 async function stage(page, text) {
   const desktop = page.getByTestId("office-stage");
   await textIncludes(await desktop.count() ? desktop : page.getByTestId("office-mobile").getByRole("status"), text);
@@ -226,6 +236,128 @@ async function main() {
   await mkdir(OUT, { recursive: true });
   browser = await chromium.launch({ headless: true, channel: process.env.BROWSER_CHANNEL ?? "chrome" });
   report.browser = browser.version();
+  for (const viewport of VIEWPORTS) await scenario(`organization-hierarchy-${viewport.width}`, async (page) => {
+    await openOrganization(page);
+    await page.getByRole("heading", { name: "AI 역할 조직도", exact: true }).waitFor({ state: "visible" });
+    assert.equal(await page.getByTestId("org-department").count(), 4);
+    assert.equal(await page.getByTestId("org-capability").count(), 13);
+    assert.equal(await page.locator('[data-testid="org-capability"][data-status="running"]').count(), 0);
+    await page.locator("main").evaluate((node) => { node.scrollTop = 0; });
+    await screenshot(page, `organization-${viewport.width}-viewport`);
+    // The application scrolls inside main. A locator screenshot alone cannot paint
+    // its offscreen content; expand only capture height, preserving responsive width.
+    const height = await page.getByTestId("org-workspace").evaluate((node) => node.scrollHeight);
+    await page.setViewportSize({ width: viewport.width, height: Math.max(viewport.height, height + 100) });
+    await page.locator("main").evaluate((node) => { node.scrollTop = 0; });
+    await page.getByTestId("org-workspace").screenshot({ path: resolve(OUT, `organization-${viewport.width}-overview.png`), animations: "disabled" });
+    report.screenshots.push(`organization-${viewport.width}-overview.png`);
+    await page.setViewportSize(viewport);
+    await page.getByTestId("org-card-payslip").click();
+    const dialog = page.getByRole("dialog", { name: /급여명세서 대조/ });
+    await dialog.waitFor({ state: "visible" });
+    await textIncludes(dialog, "필요한 입력");
+    await textIncludes(dialog, "검사하지 않는 항목");
+    await screenshot(page, `organization-${viewport.width}-detail`);
+    await page.keyboard.press("Escape");
+    assert.equal(await dialog.isVisible(), false);
+    await page.getByTestId("org-workspace").waitFor({ state: "visible" });
+    assert.equal(await page.getByTestId("org-card-payslip").evaluate((node) => node === document.activeElement), true);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth) <= 1);
+  }, { viewport });
+  await scenario("organization-filter-skill-handoff", async (page) => {
+    await openOrganization(page);
+    await page.getByLabel("조직도 스킬 검색").fill("존재하지않는기능");
+    await textIncludes(page.getByTestId("org-workspace"), "일치하는 업무 기능이 없습니다");
+    await button(page, "필터 초기화").click();
+    await button(page, "AI 모델").click();
+    assert.equal(await page.getByTestId("org-capability").count(), 3);
+    await button(page, "전체 역할").click();
+    await page.getByTestId("org-card-departure").click();
+    await button(page, "스킬 항목 보기").click();
+    assert.equal(await page.getByTestId("skill-workspace").getAttribute("data-skill-id"), "departure");
+    assert.equal(await page.getByTestId("skill-input-item").count(), 5);
+    await page.getByTestId("skill-select-payslip").click();
+    assert.equal(await page.getByTestId("skill-input-item").count(), 2);
+    await page.getByTestId("skill-not-covered").waitFor({ state: "visible" });
+    await button(page, "이 스킬로 상담 시작").click();
+    await openOps(page);
+    assert.match(await page.locator("#agent-utterance").inputValue(), /명세서|월급|공제/);
+    assert.equal(await page.evaluate(() => window.__officeFixture.agents.length), 0, "Browsing a skill must not dispatch a request");
+  });
+  await scenario("organization-observed-run-and-reset", async (page) => {
+    const index = await start(page);
+    await emit(page, index, "routing", "running");
+    await emit(page, index, "extract", "running");
+    await openOrganization(page);
+    await page.waitForFunction(() => document.querySelectorAll('[data-testid="org-capability"][data-status="running"]').length === 2);
+    await screenshot(page, "organization-running");
+    await page.evaluate(({ index, result }) => window.__officeFixture.complete(index, result), { index, result: resultFor() });
+    await page.waitForFunction(() => document.querySelector('[data-testid="org-card-approval"]')?.getAttribute("data-status") === "review");
+    assert.equal(await page.getByTestId("org-card-departure").getAttribute("data-status"), "completed");
+    assert.equal(await page.getByTestId("org-card-payslip").getAttribute("data-status"), "ready");
+    await screenshot(page, "organization-review");
+    await returnOffice(page); await openOps(page);
+    await page.locator("#agent-utterance").fill("월급에서 산재보험을 공제해요");
+    await openOrganization(page);
+    assert.equal(await page.locator('[data-testid="org-capability"][data-status="completed"]').count(), 0);
+    assert.equal(await page.getByTestId("org-card-approval").getAttribute("data-status"), "ready");
+  });
+  await scenario("organization-current-result-navigation", async (page) => {
+    await finishNormal(page);
+    for (const [id, label] of [["judge", "2단 판정"], ["guard", "가드레일 G1–G8"], ["narrate", "답변 조립"], ["translate", "3단 번역"]]) {
+      await openOrganization(page);
+      await page.getByTestId(`org-card-${id}`).click();
+      await page.getByRole("dialog").getByRole("button", { name: label, exact: true }).click();
+      await page.locator("#agent-utterance").waitFor({ state: "visible", timeout: 2000 });
+      assert.equal(await page.locator("#agent-utterance").inputValue(), UTTERANCE);
+      assert.equal(await page.locator("#approval-panel").count(), 1);
+      assert.equal(await page.evaluate(() => window.__officeFixture.agents.length), 1, "Navigation must reuse the current result without another request");
+    }
+  });
+  await scenario("organization-approval-action-shares-current-run", async (page) => {
+    await finishNormal(page);
+    await openOrganization(page);
+    await page.getByTestId("org-card-approval").click();
+    await button(page, "현재 상담 검토하기").click();
+    const chat = page.getByRole("dialog", { name: "Agent 채팅", exact: true });
+    await chat.getByRole("button", { name: "값을 확인했습니다 — 승인", exact: true }).click();
+    await chat.getByRole("button", { name: "닫기", exact: true }).click();
+    assert.equal(await page.getByTestId("org-card-approval").getAttribute("data-status"), "completed");
+    await page.getByTestId("org-card-application").click();
+    await button(page, "현재 상담 검토하기").click();
+    await chat.getByRole("button", { name: "이 값으로 판정 보기 ▶", exact: true }).click();
+    await openOrganization(page);
+    await page.waitForFunction(() => document.querySelector('[data-testid="org-card-application"]')?.getAttribute("data-status") === "completed");
+    assert.equal(await page.getByTestId("org-card-record").getAttribute("data-status"), "completed");
+    assert.equal(await page.evaluate(() => window.__officeFixture.agents.length), 1);
+  });
+  await scenario("organization-offline-does-not-invent-work", async (page) => {
+    await openOrganization(page);
+    assert.equal(await page.locator('[data-testid="org-capability"][data-status="offline"]').count(), 3);
+    assert.equal(await page.locator('[data-testid="org-capability"][data-status="running"]').count(), 0);
+    await page.getByTestId("org-card-payslip").click();
+    await button(page, "스킬 항목 보기").click();
+    assert.equal(await page.getByTestId("skill-rule-item").count(), 11, "Rules remain discoverable without an AI provider");
+  }, { offline: true });
+  for (const viewport of VIEWPORTS) await scenario(`organization-skills-${viewport.width}`, async (page) => {
+    await openOrganization(page);
+    await button(page, "스킬 목록").click();
+    assert.equal(await button(page, "알겠어요").isVisible(), false, "Workspace guidance must not be covered by unrelated companion onboarding");
+    for (const [id, rules, inputs] of [["payslip", 11, 2], ["departure", 5, 5]]) {
+      await page.getByTestId(`skill-select-${id}`).click();
+      assert.equal(await page.getByTestId("skill-rule-item").count(), rules);
+      assert.equal(await page.getByTestId("skill-input-item").count(), inputs);
+      await page.getByTestId("skill-rule-search").fill("찾을수없는규칙");
+      assert.equal(await page.getByTestId("skill-rule-item").count(), 0);
+      await page.getByTestId("skill-rule-search-reset").click();
+      assert.equal(await page.getByTestId("skill-rule-item").count(), rules);
+      await page.locator("main").evaluate((node) => { node.scrollTop = 0; });
+      await screenshot(page, `organization-skill-${id}-${viewport.width}`);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth) <= 1);
+    }
+    await page.getByTestId("skill-workspace").getByRole("button", { name: "AI 역할 조직도", exact: true }).click();
+    await page.getByTestId("org-workspace").waitFor({ state: "visible" });
+  }, { viewport });
   await scenario("integration-empty-queue-and-user-resubmission", async (page) => {
     await button(page, "판정 결과 보기").click();
     await page.getByText("판정할 상담이 아직 없습니다", { exact: true }).waitFor({ state: "visible" });

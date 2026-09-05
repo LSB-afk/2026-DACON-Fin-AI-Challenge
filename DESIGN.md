@@ -23,6 +23,9 @@
 - Context: desktop demonstration and interactive operation; mobile retains every essential consultation action.
 
 ## Information architecture
+- AI role organization revision (2026-09-05): navigation and title are `AI 역할 조직도`. Follow the supplied hierarchy: two dark authority cards, two light coordination cards, connected four department columns. Use only current service roles: 상담 접수·분석 / 금융 판정 / 근거·안전 검증 / 답변·상담 운영. Human approval and code-based result application are distinct; a second human compliance approver, external RM/jeonse products, invented queues and uptime are out of scope.
+- Organization cards are individual capabilities, not independent fictional agents. Each opens a detail panel with actor, input, output, constraints, implementation source and relevant action. Two registered financial skills retain separate input/rule/scope sections in the skill catalog. Organization-to-skill navigation selects the intended skill; starting a consultation fills an example only and never dispatches a request without the user's run action.
+- Organization status uses the same case/run/input-scoped live projection as ontology. Availability must not look like execution. Only observed requests show running/elapsed data; approval readiness must come from the current actual answer and approval gate. Header counts summarize actual card statuses, not fake workload.
 - Primary navigation: retain existing service navigation and stable FLOW identifiers.
 - Core routes/screens: agent-run office; operation panel with input, timeline and approval; ontology explorer; existing support screens.
 - Ontology composition: left searchable taxonomy, center local/global graph and selected concept, right definition / properties / incoming and outgoing links / constraints. All panes share one selection. Mobile uses accessible stacked panels rather than a squeezed desktop layout.
@@ -37,6 +40,7 @@
 - Tradeoffs: genuine isometric geometry with Canvas 2D preserves the current dependency stack and readable HTML labels.
 
 ## Visual language
+- Organization chart: white canvas, navy authority surface (#08295C to #05428E), existing blue accent (#006EDA), existing pale surface (#F6F9FD), ink (#101A2B) and muted (#46556D). Use existing Pretendard with 24px page title, 16px department titles, 14px capability titles, 12px descriptions. Rounded cards encode hierarchy rather than decorative repeated statistics. Thin pale-blue connectors represent responsibility, explicitly not a serial execution schedule. Four columns when content width allows; two on tablet, one on mobile. Details are a keyboard-accessible modal side panel so the chart itself does not squeeze. No new ambient animation.
 - Color: white #FFFFFF, cool floor #EAF0F5, ink #101A2B, brand blue #006EDA, warm wood #B89067, sage #7D9C88. Semantic text uses existing CSS tokens.
 - Typography: existing Pretendard/system Korean face. Labels stay screen-aligned, at least 12px; progressive detail follows zoom and selection.
 - Layout: single contiguous open office, central reception/dispatch atrium, 6–8 department neighborhoods, approximately 24 work/support spaces with realistic doors and corridors.
@@ -93,3 +97,4 @@
 - Validation handoff: service/screenshots/knowledge-office/README.md records this extension, current-snapshot/source boundaries, mobile graph behavior, office motion, screenshots and fresh verification. service/screenshots/central-office/README.md remains the historical previous-task report, not proof of a fresh provider run.
 - Latest ontology renderer handoff: service/screenshots/ontology-3d/README.md supersedes the earlier SVG/ring graph description only. Its screenshot evidence and browser tests cover genuine 3D rotation, portal expansion, touch capture, focus restoration and motion preferences; the prior business/source contracts remain unchanged.
 - Current white/live handoff: service/screenshots/ontology-live/README.md supersedes the dark renderer above. Actual service execution grows a current graph; dictionary and execution inspection remain available. In-memory lifetime and provider-fixture limitations are explicit.
+- Organization handoff: service/screenshots/organization/README.md records the reference-adapted hierarchy, thirteen actual capabilities versus two registered financial skills, current-result navigation, responsive screenshots and validation limits. The skill catalog uses the compact companion dock so onboarding never covers its own guidance or rule list.

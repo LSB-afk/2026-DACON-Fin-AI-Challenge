@@ -18,7 +18,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cases, getCase, type Case } from "@/lib/cases";
-import { routeByKeyword, needsClarification, getSkill } from "@/lib/skills";
+import { routeByKeyword, needsClarification, getSkill, type SkillId } from "@/lib/skills";
 import { judgePayslip, type Payslip, type WorkplaceSize } from "@/lib/rules/payslip";
 import { judgeDeparture, type DepartureInput, type Visa } from "@/lib/rules/departure";
 import { moneyTotals, type Finding } from "@/lib/rules/types";
@@ -113,6 +113,8 @@ export default function Console() {
    * 건너뛰면 판정 모니터가 먼저 떴다 (2026-09-03 수정). 운영자는 좌측 메뉴로 모니터에 간다.
    */
   const [view, setView] = useState<ViewId>("user");
+  const [inspectedSkillId, setInspectedSkillId] = useState<SkillId>("payslip");
+  const [agentEntryPanelOpen, setAgentEntryPanelOpen] = useState(false);
   const [tab, setTab] = useState<MonitorTab>("findings");
   const [caseId, setCaseId] = useState(cases[0].id);
   /*
@@ -487,7 +489,7 @@ export default function Console() {
   const [chatOpen, setChatOpen] = useState(false);
 
   const [translationRequests] = useState(createTranslationRequests);
-  const translationAnswer = view === "ontology"
+  const translationAnswer = view === "ontology" || view === "org"
     ? ontologySource.kind === "agent" ? agentLoop.finalAnswer : answer
     : view === "agent-run" || (agentLoop.approvedAt && !ran) ? agentLoop.finalAnswer : answer;
   const translationScope = JSON.stringify([caseId, agentLoop.runId, agentLoop.inputRevision, translationAnswer]);
@@ -736,6 +738,18 @@ export default function Console() {
   const [autoRun, setAutoRun] = useState(0);
   const autoRunHandled = useRef(0);
   const [pendingAgentApply, setPendingAgentApply] = useState<{ caseId: string; runId: string | null; revision: number } | null>(null);
+  function startSkillConsultation(id: SkillId) {
+    autoRunHandled.current = autoRun;
+    agentLoop.cancel();
+    agentLoop.setUtterance(getSkill(id).examples[0]);
+    setLinkedAgentRunId(null);
+    setLinkedAgentRevision(null);
+    setPendingAgentApply(null);
+    translationRequests.cancel();
+    setTranslationResult(null);
+    setAgentEntryPanelOpen(true);
+    setView("agent-run");
+  }
   useEffect(() => {
     if (autoRun === 0 || autoRunHandled.current === autoRun) return;
     // 새 값으로 그려진 프레임 뒤에 실행한다 — 동기 실행은 계단식 렌더가 된다
@@ -815,6 +829,7 @@ export default function Console() {
   const [prevViewTab, setPrevViewTab] = useState({ view, tab });
   if (prevViewTab.view !== view || prevViewTab.tab !== tab) {
     setPrevViewTab({ view, tab });
+    if (view !== "agent-run" && agentEntryPanelOpen) setAgentEntryPanelOpen(false);
     // 화면이 바뀌면 그 화면이 든 대분류를 연다 — 접어 둔 채 들어와도 현재 위치가 보인다
     if (prevViewTab.view !== view) setNavOpenGroups((s) => ({ ...s, [navGroupOf(view)]: true }));
     if (view === "search" || view === "standards-map" || tab === "evidence") setEvidenceViewed(true);
@@ -1051,7 +1066,7 @@ export default function Console() {
      보조다. 아이콘을 누르면 메뉴가 그 자리에서 열린다 (말풍선은 상태 바가 대신한다). */
   // Dedicated workspace guidance owns the explanation here; an unrelated monitor
   // quest bubble must not cover graph controls or imply that this run needs execution.
-  const cityDock = view === "agent-run" || view === "ontology";
+  const cityDock = view === "agent-run" || view === "ontology" || view === "org" || view === "skills";
   const companionUi = !entrance && (
     <div
       ref={pgWrapRef}
@@ -1477,6 +1492,7 @@ export default function Console() {
           {view === "agent-run" && (
             <AgentRunView
               loop={wrappedAgentLoop}
+              initialPanelOpen={agentEntryPanelOpen}
               caseId={caseId}
               onSelectCase={selectCase}
               onApply={applyAgentResult}
@@ -1504,13 +1520,29 @@ export default function Console() {
           )}
           {view === "standards-map" && <StandardsMapView />}
           {view === "golden" && <GoldenView />}
-          {view === "skills" && <SkillsView />}
+          {view === "skills" && <SkillsView initialSkillId={inspectedSkillId}
+            onOpenOrganization={() => setView("org")}
+            onStartSkill={startSkillConsultation} />}
           {view === "ontology" && <OntologyView abox={ontologyABox} source={ontologySource}
             live={{ caseId, monitorRevision: monitorVersion.revision, agent: agentLoop, abox: ontologyABox, translation: officeTranslation,
               monitor: ontologySource.kind === "monitor" && ontologyABox ? { steps, answer } : undefined }}
             loop={wrappedAgentLoop} onOpenConsult={() => setChatOpen(true)} />}
           {view === "org" && (
-            <OrgView narratorLive={!!provider?.provider} agentLive={!!agentProvider?.provider} agentModel={agentProvider?.model} />
+            <OrgView
+              live={{ caseId, monitorRevision: monitorVersion.revision, agent: agentLoop, abox: ontologyABox, translation: officeTranslation,
+                monitor: ontologySource.kind === "monitor" && ontologyABox ? { steps, answer } : undefined }}
+              availability={{ agent: !!agentProvider?.provider, translation: !!provider?.provider }}
+              canApprove={ontologySource.kind === "agent" && agentLoop.canApprove}
+              onNavigate={(v, t) => {
+                // An unapplied agent result is not a monitor result. Keep its identity
+                // and reveal the existing controls instead of an empty/older monitor.
+                const target = v === "monitor" && ontologySource.kind === "agent" ? "agent-run" : v;
+                if (target === "agent-run") setAgentEntryPanelOpen(true);
+                setView(target);
+                if (target === "monitor" && t) setTab(t);
+              }}
+              onOpenSkill={(id) => { setInspectedSkillId(id); setView("skills"); }}
+              onOpenConsult={() => setChatOpen(true)} />
           )}
           {view === "scenarios" && <ScenariosView onApply={applyScenario} />}
           {view === "approvals" && (

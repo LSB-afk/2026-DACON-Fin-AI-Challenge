@@ -40,6 +40,7 @@ export function AgentRunView({
   translation,
   translateState,
   onTranslate,
+  initialPanelOpen = false,
 }: {
   loop: AgentLoop;
   /** 활성 고객이 연결된 익명 케이스 id */
@@ -51,6 +52,8 @@ export function AgentRunView({
   translation?: OfficeCtx["translation"];
   translateState?: TranslateState;
   onTranslate?: (language: TranslateState["lang"]) => void;
+  /** Organization/skill handoffs expose the existing current-run controls on entry. */
+  initialPanelOpen?: boolean;
 }) {
   const {
     utterance, setUtterance, todayInput, setTodayInput,
@@ -64,7 +67,7 @@ export function AgentRunView({
   const live = !!provider?.provider;
 
   /* 첫 진입은 중앙 사무실을 보여주며 상담 입력은 명시적으로 연다. */
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(initialPanelOpen);
   function togglePanel(next: boolean) {
     setPanelOpen(next);
   }

@@ -455,7 +455,7 @@ export const NAV_GROUPS: NavGroup[] = [
         title: "작동 원리",
         items: [
           { id: "harness", icon: "harness", label: "AI 작동 규칙", tech: "금융정착 Agent 하네스", live: true },
-          { id: "org", icon: "org", label: "AI 역할 분담", tech: "AI 조직도", live: true },
+          { id: "org", icon: "org", label: "AI 역할 조직도", tech: "부서·스킬·승인 체계", live: true },
           { id: "explain", icon: "book", label: "판정 방식 설명", tech: "판단 해설", live: true },
         ],
       },
