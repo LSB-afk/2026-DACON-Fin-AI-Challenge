@@ -1,0 +1,37 @@
+{
+    "provider": "ollama",
+    "model": "gemma4:latest",
+    "utterance": "\ubca0\ud2b8\ub0a8 \uc0ac\ub78c\uc778\ub370 2023\ub144 9\uc6d4 1\uc77c\uc5d0 \uc785\uc0ac\ud574\uc11c 2026\ub144 10\uc6d4 15\uc77c\uc5d0 \ucd9c\uad6d\ud574\uc694 \uc6d4\uae09\uc740 215\ub9cc\uc6d0\uc774\uc5d0\uc694",
+    "router": {
+        "skill": "departure",
+        "evidence": [
+            "\ucd9c\uad6d\ud574\uc694",
+            "2026\ub144 10\uc6d4 15\uc77c\uc5d0 \ucd9c\uad6d\ud574\uc694",
+            "\uc6d4\uae09\uc740 215\ub9cc\uc6d0\uc774\uc5d0\uc694"
+        ],
+        "filteredCount": 0
+    },
+    "routerError": null,
+    "routerRaw": "```json\n{\n  \"skill\": \"departure\",\n  \"evidence\": [\n    \"\ucd9c\uad6d\ud574\uc694\",\n    \"2026\ub144 10\uc6d4 15\uc77c\uc5d0 \ucd9c\uad6d\ud574\uc694\",\n    \"\uc6d4\uae09\uc740 215\ub9cc\uc6d0\uc774\uc5d0\uc694\"\n  ]\n}\n```",
+    "intake": {
+        "fields": {
+            "nationality": "\ubca0\ud2b8\ub0a8",
+            "hireDate": "2023-09-01",
+            "departureDate": "2026-10-15",
+            "monthlyWage": 2150000
+        },
+        "evidences": {
+            "nationality": "\ubca0\ud2b8\ub0a8 \uc0ac\ub78c",
+            "hireDate": "2023\ub144 9\uc6d4 1\uc77c",
+            "departureDate": "2026\ub144 10\uc6d4 15\uc77c",
+            "monthlyWage": "215\ub9cc\uc6d0"
+        },
+        "questions": [
+            "\uccb4\ub958\uc790\uaca9\uc744 \uc54c\ub824\uc8fc\uc138\uc694 (E-9 / H-2 / E-8 / \uae30\ud0c0)",
+            "\uc0ac\uc5c5\uc7a5 \uaddc\ubaa8\ub97c \uc54c\ub824\uc8fc\uc138\uc694 (5\uc778\uc774\uc0c1 / 5\uc778\ubbf8\ub9cc / \ubaa8\ub984)"
+        ],
+        "discarded": []
+    },
+    "intakeError": null,
+    "intakeRaw": "```json\n{\n  \"nationality\": {\n    \"value\": \"\ubca0\ud2b8\ub0a8\",\n    \"evidence\": \"\ubca0\ud2b8\ub0a8 \uc0ac\ub78c\"\n  },\n  \"hireDate\": {\n    \"value\": \"2023-09-01\",\n    \"evidence\": \"2023\ub144 9\uc6d4 1\uc77c\"\n  },\n  \"departureDate\": {\n    \"value\": \"2026-10-15\",\n    \"evidence\": \"2026\ub144 10\uc6d4 15\uc77c\"\n  },\n  \"monthlyWage\": {\n    \"value\": \"215\",\n    \"evidence\": \"215\ub9cc\uc6d0\"\n  }\n}\n```"
+}

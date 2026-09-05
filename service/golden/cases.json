@@ -1,0 +1,1343 @@
+{
+  "note": [
+    "정답 세트. scripts/verify-golden.mjs 가 이 파일을 읽어 생산 코드에 그대로 넣고 대조한다.",
+    "판정 로직을 여기에 옮겨 적지 않는다. 기대값만 적는다.",
+    "금액은 정확값 대신 범위로 적는다. 법정 상수가 바뀌면 정확값은 전부 깨지고, 그러면 다음 사람이 기대값을 실제값으로 덮어써 버린다.",
+    "덮지 못하는 범위는 scripts/verify-golden.mjs 머리말에 적어 두었다."
+  ],
+  "thresholds": {
+    "note": "케이스를 늘리면서 기준을 낮추면 같은 diff 안에서 보이라고 여기에 둔다.",
+    "minCases": 18,
+    "minCasesPerGroup": 2,
+    "requiredGroups": [
+      "정상",
+      "없는돈약속유도",
+      "국적분기",
+      "기한경계",
+      "근속경계",
+      "라우팅실패",
+      "상수경계"
+    ],
+    "minCasesWithForbiddenText": 10,
+    "minCasesWithAmountBound": 8,
+    "maxGuardViolations": 0,
+    "maxUncoveredRules": 0
+  },
+  "groups": {
+    "정상": "제품이 평범하게 맞히는 길. 문제 없는 서류는 조용하고, 반례 없는 룰은 조건과 상관없이 걸린다.",
+    "없는돈약속유도": "받을 수 없는 돈을 받을 수 있다고 말하게 만드는 입력. 이 서비스가 무너지는 가장 큰 이유다.",
+    "국적분기": "국적과 체류자격이 결과를 뒤집는 자리. 명단에서 한 줄만 빠져도 사람이 돈을 못 받는다.",
+    "기한경계": "today 를 하루씩 옮겨 수령가능 · 기한임박 · 수령불가가 갈리는 자리를 양쪽에서 짚는다.",
+    "근속경계": "근속 12개월 앞뒤 하루 차이. 여기서 사업주 귀속인지 근로자 몫인지가 갈린다.",
+    "라우팅실패": "발화를 어느 스킬로 보낼지 못 고르는 자리. 잘못 보내면 엉뚱한 질문을 되묻는다.",
+    "상수경계": "법정 상수를 1원 · 1군 차이로 넘나든다. 상수를 잘못 고치면 여기가 먼저 깨진다."
+  },
+  "cases": [
+    {
+      "id": "P01-깨끗한명세서",
+      "group": "정상",
+      "desc": "요율이 맞고 떼면 안 될 항목이 없는 명세서. 지적이 하나도 나오면 안 된다.",
+      "input": {
+        "skill": "payslip",
+        "value": {
+          "earnings": [
+            {
+              "label": "기본급",
+              "amount": 2156880
+            }
+          ],
+          "deductions": [
+            {
+              "label": "국민연금",
+              "amount": 102450
+            },
+            {
+              "label": "건강보험",
+              "amount": 77540
+            },
+            {
+              "label": "장기요양보험료",
+              "amount": 10190
+            },
+            {
+              "label": "고용보험",
+              "amount": 19410
+            },
+            {
+              "label": "소득세",
+              "amount": 20000
+            },
+            {
+              "label": "지방소득세",
+              "amount": 2000
+            }
+          ],
+          "hours": {
+            "scheduled": 209,
+            "overtime": 0,
+            "night": 0
+          },
+          "workplaceSize": "5인이상"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "A2",
+          "A4",
+          "A5",
+          "A6"
+        ],
+        "mustNotFire": [
+          "A1",
+          "A3",
+          "A7",
+          "A8",
+          "B1",
+          "B3",
+          "C1"
+        ],
+        "levels": {
+          "A2": "정상",
+          "A4": "정상",
+          "A5": "정상",
+          "A6": "정상"
+        },
+        "forbiddenText": [
+          "위법",
+          "미달",
+          "부족",
+          "확인해"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "P09-산재보험공제",
+      "group": "정상",
+      "desc": "산재보험료는 사업주가 전액 낸다. 금액이 적어도 사업장이 작아도 반례가 없다.",
+      "input": {
+        "skill": "payslip",
+        "value": {
+          "earnings": [
+            {
+              "label": "기본급",
+              "amount": 2156880
+            }
+          ],
+          "deductions": [
+            {
+              "label": "국민연금",
+              "amount": 102450
+            },
+            {
+              "label": "건강보험",
+              "amount": 77540
+            },
+            {
+              "label": "장기요양보험료",
+              "amount": 10190
+            },
+            {
+              "label": "고용보험",
+              "amount": 19410
+            },
+            {
+              "label": "산재보험",
+              "amount": 12000
+            }
+          ],
+          "hours": {
+            "scheduled": 209,
+            "overtime": 0,
+            "night": 0
+          },
+          "workplaceSize": "5인미만"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "A1"
+        ],
+        "mustNotFire": [
+          "B3"
+        ],
+        "levels": {
+          "A1": "위법"
+        },
+        "amountAtLeast": {
+          "A1": 12000
+        },
+        "amountAtMost": {
+          "A1": 12000
+        },
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "P10-출국만기보험공제",
+      "group": "정상",
+      "desc": "출국만기보험료도 사업주 몫이다. 근로자 공제란에 있으면 그대로 위법이다.",
+      "input": {
+        "skill": "payslip",
+        "value": {
+          "earnings": [
+            {
+              "label": "기본급",
+              "amount": 2156880
+            }
+          ],
+          "deductions": [
+            {
+              "label": "국민연금",
+              "amount": 102450
+            },
+            {
+              "label": "건강보험",
+              "amount": 77540
+            },
+            {
+              "label": "장기요양보험료",
+              "amount": 10190
+            },
+            {
+              "label": "고용보험",
+              "amount": 19410
+            },
+            {
+              "label": "출국만기보험",
+              "amount": 30000
+            }
+          ],
+          "hours": {
+            "scheduled": 209,
+            "overtime": 0,
+            "night": 0
+          },
+          "workplaceSize": "5인이상"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "C1"
+        ],
+        "mustNotFire": [
+          "B3"
+        ],
+        "levels": {
+          "C1": "위법"
+        },
+        "amountAtLeast": {
+          "C1": 30000
+        },
+        "amountAtMost": {
+          "C1": 30000
+        },
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "D01-베트남정상출국",
+      "group": "정상",
+      "desc": "근속 26개월 베트남 국적 E-9. 세 갈래가 모두 열리고 받을 돈이 나온다.",
+      "input": {
+        "skill": "departure",
+        "value": {
+          "nationality": "베트남",
+          "visa": "E-9",
+          "hireDate": "2024-01-15",
+          "departureDate": "2026-03-15",
+          "monthlyWage": 2500000,
+          "today": "2026-01-15"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "S2-1",
+          "S2-2",
+          "S2-3",
+          "S2-4"
+        ],
+        "mustNotFire": [
+          "S2-5"
+        ],
+        "levels": {
+          "S2-1": "수령가능",
+          "S2-2": "수령가능",
+          "S2-3": "수령가능",
+          "S2-4": "확인필요"
+        },
+        "amountAtLeast": {
+          "S2-1": 4500000,
+          "S2-2": 400000,
+          "S2-3": 5000000
+        },
+        "amountAtMost": {
+          "S2-1": 6500000,
+          "S2-2": 400000,
+          "S2-3": 7000000
+        },
+        "forbiddenText": [
+          "받을 수 없습니다",
+          "반드시 받을 수 있",
+          "100%"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "P12-근거없는공제",
+      "group": "정상",
+      "desc": "법령에도 단체협약에도 없는 이름의 공제. 이름이 무엇이든 근거를 물을 수 있다.",
+      "input": {
+        "skill": "payslip",
+        "value": {
+          "earnings": [
+            {
+              "label": "기본급",
+              "amount": 2156880
+            }
+          ],
+          "deductions": [
+            {
+              "label": "국민연금",
+              "amount": 102450
+            },
+            {
+              "label": "건강보험",
+              "amount": 77540
+            },
+            {
+              "label": "장기요양보험료",
+              "amount": 10190
+            },
+            {
+              "label": "고용보험",
+              "amount": 19410
+            },
+            {
+              "label": "친목회비",
+              "amount": 30000
+            }
+          ],
+          "hours": {
+            "scheduled": 209,
+            "overtime": 0,
+            "night": 0
+          },
+          "workplaceSize": "5인이상"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "B3"
+        ],
+        "mustNotFire": [
+          "B1"
+        ],
+        "levels": {
+          "B3": "확인필요"
+        },
+        "amountAtLeast": {
+          "B3": 30000
+        },
+        "amountAtMost": {
+          "B3": 30000
+        },
+        "forbiddenText": [
+          "위법입니다",
+          "반드시 받을 수 있"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "P13-근로시간누락",
+      "group": "없는돈약속유도",
+      "desc": "사진이 잘려 근로시간 칸이 없다. 시간을 모르면 부족액도 모른다. 다시 찍어 달라고 해야 한다.",
+      "input": {
+        "skill": "payslip",
+        "value": {
+          "earnings": [
+            {
+              "label": "기본급",
+              "amount": 2156880
+            }
+          ],
+          "deductions": [
+            {
+              "label": "국민연금",
+              "amount": 102450
+            },
+            {
+              "label": "건강보험",
+              "amount": 77540
+            }
+          ],
+          "workplaceSize": "모름"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "A8"
+        ],
+        "mustNotFire": [
+          "A7"
+        ],
+        "levels": {
+          "A8": "확인필요"
+        },
+        "forbiddenText": [
+          "연장근로 가산수당이 부족합니다",
+          "연장근로 가산수당이 부족해 보입니다"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "P02-5인미만연장수당",
+      "group": "없는돈약속유도",
+      "desc": "5인 미만 사업장은 가산수당 규정을 적용받지 않는다. 부족액을 말하면 없는 돈이다.",
+      "input": {
+        "skill": "payslip",
+        "value": {
+          "earnings": [
+            {
+              "label": "기본급",
+              "amount": 2156880
+            },
+            {
+              "label": "연장근로수당",
+              "amount": 100000
+            }
+          ],
+          "deductions": [
+            {
+              "label": "국민연금",
+              "amount": 102450
+            },
+            {
+              "label": "건강보험",
+              "amount": 77540
+            },
+            {
+              "label": "장기요양보험료",
+              "amount": 10190
+            },
+            {
+              "label": "고용보험",
+              "amount": 19410
+            }
+          ],
+          "hours": {
+            "scheduled": 209,
+            "overtime": 30,
+            "night": 0
+          },
+          "workplaceSize": "5인미만"
+        }
+      },
+      "expect": {
+        "mustNotFire": [
+          "A7"
+        ],
+        "mustFire": [
+          "A6"
+        ],
+        "forbiddenText": [
+          "연장근로 가산수당이 부족합니다",
+          "연장근로 가산수당이 부족해 보입니다"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "P03-사업장규모모름",
+      "group": "없는돈약속유도",
+      "desc": "규모를 모르면 단정하지 않고 되묻는다. 여기서 위법이라고 말하면 근로자가 근거 없이 다투러 간다.",
+      "input": {
+        "skill": "payslip",
+        "value": {
+          "earnings": [
+            {
+              "label": "기본급",
+              "amount": 2156880
+            },
+            {
+              "label": "연장근로수당",
+              "amount": 100000
+            }
+          ],
+          "deductions": [
+            {
+              "label": "국민연금",
+              "amount": 102450
+            },
+            {
+              "label": "건강보험",
+              "amount": 77540
+            },
+            {
+              "label": "장기요양보험료",
+              "amount": 10190
+            },
+            {
+              "label": "고용보험",
+              "amount": 19410
+            }
+          ],
+          "hours": {
+            "scheduled": 209,
+            "overtime": 30,
+            "night": 0
+          },
+          "workplaceSize": "모름"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "A7"
+        ],
+        "levels": {
+          "A7": "확인필요"
+        },
+        "amountAtLeast": {
+          "A7": 300000
+        },
+        "amountAtMost": {
+          "A7": 420000
+        },
+        "forbiddenText": [
+          "연장근로 가산수당이 부족합니다",
+          "위법입니다"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "P11-5인이상연장수당",
+      "group": "없는돈약속유도",
+      "desc": "대조군. 같은 입력에 규모만 5인 이상이면 위법으로 뜬다. 위 두 건이 그냥 조용한 것이 아님을 보인다.",
+      "input": {
+        "skill": "payslip",
+        "value": {
+          "earnings": [
+            {
+              "label": "기본급",
+              "amount": 2156880
+            },
+            {
+              "label": "연장근로수당",
+              "amount": 100000
+            }
+          ],
+          "deductions": [
+            {
+              "label": "국민연금",
+              "amount": 102450
+            },
+            {
+              "label": "건강보험",
+              "amount": 77540
+            },
+            {
+              "label": "장기요양보험료",
+              "amount": 10190
+            },
+            {
+              "label": "고용보험",
+              "amount": 19410
+            }
+          ],
+          "hours": {
+            "scheduled": 209,
+            "overtime": 30,
+            "night": 0
+          },
+          "workplaceSize": "5인이상"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "A7"
+        ],
+        "levels": {
+          "A7": "위법"
+        },
+        "amountAtLeast": {
+          "A7": 300000
+        },
+        "amountAtMost": {
+          "A7": 420000
+        },
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "P04-숙식비공제",
+      "group": "없는돈약속유도",
+      "desc": "숙식비는 동의서가 있으면 적법하다. 돌려받는다고 단정할 수 없어 질문을 돌려줘야 한다.",
+      "input": {
+        "skill": "payslip",
+        "value": {
+          "earnings": [
+            {
+              "label": "기본급",
+              "amount": 2156880
+            }
+          ],
+          "deductions": [
+            {
+              "label": "국민연금",
+              "amount": 102450
+            },
+            {
+              "label": "건강보험",
+              "amount": 77540
+            },
+            {
+              "label": "장기요양보험료",
+              "amount": 10190
+            },
+            {
+              "label": "고용보험",
+              "amount": 19410
+            },
+            {
+              "label": "숙식비",
+              "amount": 400000
+            }
+          ],
+          "hours": {
+            "scheduled": 209,
+            "overtime": 0,
+            "night": 0
+          },
+          "workplaceSize": "5인이상"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "B1"
+        ],
+        "mustNotFire": [
+          "B3"
+        ],
+        "levels": {
+          "B1": "확인필요"
+        },
+        "amountAtLeast": {
+          "B1": 400000
+        },
+        "amountAtMost": {
+          "B1": 400000
+        },
+        "forbiddenText": [
+          "위법입니다",
+          "불법입니다",
+          "반드시 받을 수 있",
+          "소송하세요"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "D02-근속11개월",
+      "group": "없는돈약속유도",
+      "desc": "근속 1년을 못 채우면 출국만기보험 일시금은 사업주에게 간다. 금액을 붙이면 안 되고 차액 룰도 나오면 안 된다.",
+      "input": {
+        "skill": "departure",
+        "value": {
+          "nationality": "베트남",
+          "visa": "E-9",
+          "hireDate": "2025-01-15",
+          "departureDate": "2025-12-15",
+          "monthlyWage": 2500000,
+          "today": "2025-11-01"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "S2-1",
+          "S2-2",
+          "S2-3"
+        ],
+        "mustNotFire": [
+          "S2-4"
+        ],
+        "levels": {
+          "S2-1": "수령불가",
+          "S2-2": "수령가능"
+        },
+        "amountAtLeast": {
+          "S2-2": 400000
+        },
+        "amountAtMost": {
+          "S2-2": 400000
+        },
+        "forbiddenText": [
+          "출국만기보험(퇴직금)을 청구할 수 있습니다"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "D03-출국4년경과",
+      "group": "없는돈약속유도",
+      "desc": "출국 후 3년이 지나면 보험금은 한국산업인력공단으로 넘어간다. 각 갈래가 스스로 내려앉아야 하고, 어느 룰도 돈을 약속하면 안 된다. 2026-08-26 갱신 — 전에는 S2-5 만 수령불가라 적고 S2-1·S2-2 가 450만원을 함께 약속했다. 그 모순을 가드레일 G8 과 이 케이스가 함께 막는다.",
+      "input": {
+        "skill": "departure",
+        "value": {
+          "nationality": "베트남",
+          "visa": "E-9",
+          "hireDate": "2020-01-15",
+          "departureDate": "2022-01-15",
+          "monthlyWage": 2500000,
+          "today": "2026-02-15"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "S2-1",
+          "S2-2"
+        ],
+        "mustNotFire": [
+          "S2-5"
+        ],
+        "levels": {
+          "S2-1": "수령불가",
+          "S2-2": "수령불가"
+        },
+        "forbiddenText": [
+          "출국만기보험(퇴직금)을 청구할 수 있습니다",
+          "귀국비용보험을 청구할 수 있습니다",
+          "이미 출국했지만 아직 청구할 수 있습니다"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "D04-네팔연금미가입",
+      "group": "국적분기",
+      "desc": "네팔은 국민연금 사업장 적용제외국이다. 낸 돈이 없으니 돌려받을 돈도 없다.",
+      "input": {
+        "skill": "departure",
+        "value": {
+          "nationality": "네팔",
+          "visa": "E-9",
+          "hireDate": "2024-01-15",
+          "departureDate": "2026-03-15",
+          "monthlyWage": 2500000,
+          "today": "2026-01-15"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "S2-1",
+          "S2-2",
+          "S2-3"
+        ],
+        "levels": {
+          "S2-3": "수령불가"
+        },
+        "amountAtLeast": {
+          "S2-2": 500000
+        },
+        "amountAtMost": {
+          "S2-2": 500000
+        },
+        "forbiddenText": [
+          "국민연금 반환일시금을 청구할 수 있습니다"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "D08-미얀마연금미가입",
+      "group": "국적분기",
+      "desc": "미얀마도 같은 적용제외국이다. 명단이 한 나라만 살아 있는 상태를 잡으려고 두 나라를 함께 둔다.",
+      "input": {
+        "skill": "departure",
+        "value": {
+          "nationality": "미얀마",
+          "visa": "E-9",
+          "hireDate": "2024-01-15",
+          "departureDate": "2026-03-15",
+          "monthlyWage": 2500000,
+          "today": "2026-01-15"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "S2-3"
+        ],
+        "levels": {
+          "S2-3": "수령불가"
+        },
+        "amountAtLeast": {
+          "S2-2": 500000
+        },
+        "amountAtMost": {
+          "S2-2": 500000
+        },
+        "forbiddenText": [
+          "국민연금 반환일시금을 청구할 수 있습니다"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "D05-우즈베키스탄E9협정면제",
+      "group": "국적분기",
+      "desc": "우즈베키스탄 국적 E-9 은 사회보장협정으로 보험료가 면제된다. 면제는 미납이 아니라 애초에 낼 것이 없는 상태다.",
+      "input": {
+        "skill": "departure",
+        "value": {
+          "nationality": "우즈베키스탄",
+          "visa": "E-9",
+          "hireDate": "2024-01-15",
+          "departureDate": "2026-03-15",
+          "monthlyWage": 2500000,
+          "today": "2026-01-15"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "S2-3"
+        ],
+        "levels": {
+          "S2-3": "수령불가"
+        },
+        "forbiddenText": [
+          "국민연금 반환일시금을 청구할 수 있습니다"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "D06-우즈베키스탄H2미확인",
+      "group": "국적분기",
+      "desc": "같은 나라라도 체류자격이 H-2 면 협정 면제가 아니다. 명단에도 없으니 단정하지 말고 1355 로 보내야 한다.",
+      "input": {
+        "skill": "departure",
+        "value": {
+          "nationality": "우즈베키스탄",
+          "visa": "H-2",
+          "hireDate": "2024-01-15",
+          "departureDate": "2026-03-15",
+          "monthlyWage": 2500000,
+          "today": "2026-01-15"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "S2-1",
+          "S2-2",
+          "S2-3"
+        ],
+        "levels": {
+          "S2-3": "확인필요"
+        },
+        "forbiddenText": [
+          "국민연금 반환일시금을 청구할 수 있습니다",
+          "사회보장협정으로 보험료가 면제됩니다"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "D07-가나명단밖",
+      "group": "국적분기",
+      "desc": "명단에 없는 나라는 있다 없다를 말하지 않는다. 모르면 모른다고 하고 확인할 곳을 알려준다.",
+      "input": {
+        "skill": "departure",
+        "value": {
+          "nationality": "가나",
+          "visa": "E-9",
+          "hireDate": "2024-01-15",
+          "departureDate": "2026-03-15",
+          "monthlyWage": 2500000,
+          "today": "2026-01-15"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "S2-3"
+        ],
+        "levels": {
+          "S2-3": "확인필요"
+        },
+        "forbiddenText": [
+          "국민연금 반환일시금을 청구할 수 있습니다",
+          "가입 대상이 아닙니다"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "D09-청구마감15일전",
+      "group": "기한경계",
+      "desc": "보험사 청구 마감까지 15일. 아직 급하지 않다.",
+      "input": {
+        "skill": "departure",
+        "value": {
+          "nationality": "베트남",
+          "visa": "E-9",
+          "hireDate": "2024-01-15",
+          "departureDate": "2026-03-15",
+          "monthlyWage": 2500000,
+          "today": "2026-02-21"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "S2-1",
+          "S2-2"
+        ],
+        "mustNotFire": [
+          "S2-5"
+        ],
+        "levels": {
+          "S2-1": "수령가능",
+          "S2-2": "수령가능"
+        },
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "D10-청구마감14일전",
+      "group": "기한경계",
+      "desc": "하루만 늦어도 기한임박으로 넘어간다. 기한임박은 반드시 날짜를 들고 있어야 한다.",
+      "input": {
+        "skill": "departure",
+        "value": {
+          "nationality": "베트남",
+          "visa": "E-9",
+          "hireDate": "2024-01-15",
+          "departureDate": "2026-03-15",
+          "monthlyWage": 2500000,
+          "today": "2026-02-22"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "S2-1",
+          "S2-2"
+        ],
+        "levels": {
+          "S2-1": "기한임박",
+          "S2-2": "기한임박"
+        },
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "D11-보험시효1일남음",
+      "group": "기한경계",
+      "desc": "출국 후 3년에서 하루 모자란 날. 아직 청구할 수 있다.",
+      "input": {
+        "skill": "departure",
+        "value": {
+          "nationality": "베트남",
+          "visa": "E-9",
+          "hireDate": "2020-01-15",
+          "departureDate": "2022-01-15",
+          "monthlyWage": 2500000,
+          "today": "2025-01-13"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "S2-5"
+        ],
+        "levels": {
+          "S2-5": "기한임박"
+        },
+        "forbiddenText": [
+          "보험금 소멸시효가 지났습니다"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "D12-보험시효당일",
+      "group": "기한경계",
+      "desc": "시효 만료일 당일. 민법 §157(초일 불산입)·§159(말일 종료로 만료)에 따르면 이 날은 아직 권리가 살아 있다. 게다가 우리 계산은 1년을 365일로 세어 윤년만큼 하루 이르다. 어느 쪽으로 틀릴지 골라야 한다면 청구를 시도해 볼 수 있는 쪽으로 넘어진다 — 만료라고 잘못 말하면 받을 수 있는 돈을 통째로 잃는다. 2026-08-26 갱신 — 전 기대값(수령불가)은 고치기 전 코드의 동작이었다.",
+      "input": {
+        "skill": "departure",
+        "value": {
+          "nationality": "베트남",
+          "visa": "E-9",
+          "hireDate": "2020-01-15",
+          "departureDate": "2022-01-15",
+          "monthlyWage": 2500000,
+          "today": "2025-01-14"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "S2-1",
+          "S2-2",
+          "S2-5"
+        ],
+        "levels": {
+          "S2-5": "기한임박"
+        },
+        "forbiddenText": [
+          "소멸시효가 지났습니다"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "D13-근속하루모자람",
+      "group": "근속경계",
+      "desc": "입사일이 하루 늦어 근속이 11개월로 계산된다. 여기서 일시금이 사업주에게 간다.",
+      "input": {
+        "skill": "departure",
+        "value": {
+          "nationality": "베트남",
+          "visa": "E-9",
+          "hireDate": "2025-01-16",
+          "departureDate": "2026-01-15",
+          "monthlyWage": 2500000,
+          "today": "2025-12-20"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "S2-1"
+        ],
+        "mustNotFire": [
+          "S2-4"
+        ],
+        "levels": {
+          "S2-1": "수령불가"
+        },
+        "forbiddenText": [
+          "출국만기보험(퇴직금)을 청구할 수 있습니다"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "D14-근속정확히12개월",
+      "group": "근속경계",
+      "desc": "하루 차이로 근속 12개월. 일시금이 열리고 법정 퇴직금과의 차액도 함께 나온다.",
+      "input": {
+        "skill": "departure",
+        "value": {
+          "nationality": "베트남",
+          "visa": "E-9",
+          "hireDate": "2025-01-15",
+          "departureDate": "2026-01-15",
+          "monthlyWage": 2500000,
+          "today": "2025-12-20"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "S2-1",
+          "S2-4"
+        ],
+        "levels": {
+          "S2-1": "수령가능",
+          "S2-4": "확인필요"
+        },
+        "amountAtLeast": {
+          "S2-1": 2000000,
+          "S2-4": 5000
+        },
+        "amountAtMost": {
+          "S2-1": 3000000,
+          "S2-4": 30000
+        },
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "D15-근속24개월차액",
+      "group": "근속경계",
+      "desc": "근속이 길어지면 적립분과 법정 퇴직금의 차액도 커진다. 차액은 보험사가 아니라 사업주에게 청구한다.",
+      "input": {
+        "skill": "departure",
+        "value": {
+          "nationality": "베트남",
+          "visa": "E-9",
+          "hireDate": "2024-01-15",
+          "departureDate": "2026-01-15",
+          "monthlyWage": 2500000,
+          "today": "2025-11-15"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "S2-1",
+          "S2-4"
+        ],
+        "levels": {
+          "S2-4": "확인필요"
+        },
+        "amountAtLeast": {
+          "S2-1": 4000000,
+          "S2-4": 10000
+        },
+        "amountAtMost": {
+          "S2-1": 6000000,
+          "S2-4": 50000
+        },
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "R01-급여발화",
+      "group": "라우팅실패",
+      "desc": "월급 이야기는 급여명세서 스킬로 간다. 되묻지 않는다.",
+      "input": {
+        "skill": "router",
+        "value": "월급이 이상해요"
+      },
+      "expect": {
+        "routesTo": "payslip",
+        "needsClarification": false
+      }
+    },
+    {
+      "id": "R02-두스킬동점",
+      "group": "라우팅실패",
+      "desc": "급여 이야기와 출국 이야기가 같은 점수로 걸린다. 억지로 하나를 고르면 엉뚱한 질문을 하게 된다.",
+      "input": {
+        "skill": "router",
+        "value": "급여 받고 출국해요"
+      },
+      "expect": {
+        "routesTo": null,
+        "needsClarification": true
+      }
+    },
+    {
+      "id": "R03-후보없음",
+      "group": "라우팅실패",
+      "desc": "인사말에는 아무 신호가 없다. 조용히 아무 스킬이나 고르면 안 된다.",
+      "input": {
+        "skill": "router",
+        "value": "안녕하세요"
+      },
+      "expect": {
+        "routesTo": null,
+        "needsClarification": true
+      }
+    },
+    {
+      "id": "R04-퇴직금발화",
+      "group": "라우팅실패",
+      "desc": "퇴직금은 출국 정산 쪽이다. 급여명세서로 가면 명세서 사진을 달라고 되묻게 된다.",
+      "input": {
+        "skill": "router",
+        "value": "퇴직금을 언제 받나요"
+      },
+      "expect": {
+        "routesTo": "departure",
+        "needsClarification": false
+      }
+    },
+    {
+      "id": "P05-최저임금209원미달",
+      "group": "상수경계",
+      "desc": "시급 기준에서 1원 모자란 명세서. 209시간이니 부족액은 209원이다.",
+      "input": {
+        "skill": "payslip",
+        "value": {
+          "earnings": [
+            {
+              "label": "기본급",
+              "amount": 2156671
+            }
+          ],
+          "deductions": [
+            {
+              "label": "국민연금",
+              "amount": 102450
+            },
+            {
+              "label": "건강보험",
+              "amount": 77540
+            },
+            {
+              "label": "장기요양보험료",
+              "amount": 10190
+            },
+            {
+              "label": "고용보험",
+              "amount": 19410
+            }
+          ],
+          "hours": {
+            "scheduled": 209,
+            "overtime": 0,
+            "night": 0
+          },
+          "workplaceSize": "5인이상"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "A6"
+        ],
+        "levels": {
+          "A6": "위법"
+        },
+        "amountAtLeast": {
+          "A6": 100
+        },
+        "amountAtMost": {
+          "A6": 1000
+        },
+        "forbiddenText": [
+          "최저임금 기준을 충족합니다"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "P06-국민연금상한초과",
+      "group": "상수경계",
+      "desc": "국민연금은 보수월액 상한이 있다. 상한을 무시하고 계산한 공제액은 기준과 어긋난다.",
+      "input": {
+        "skill": "payslip",
+        "value": {
+          "earnings": [
+            {
+              "label": "기본급",
+              "amount": 7000000
+            }
+          ],
+          "deductions": [
+            {
+              "label": "건강보험",
+              "amount": 251650
+            },
+            {
+              "label": "국민연금",
+              "amount": 332500
+            },
+            {
+              "label": "장기요양보험료",
+              "amount": 33067
+            },
+            {
+              "label": "고용보험",
+              "amount": 63000
+            }
+          ],
+          "hours": {
+            "scheduled": 209,
+            "overtime": 0
+          },
+          "workplaceSize": "5인이상"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "A2",
+          "A4",
+          "A5"
+        ],
+        "mustNotFire": [
+          "A3"
+        ],
+        "levels": {
+          "A2": "확인필요",
+          "A4": "정상",
+          "A5": "정상"
+        },
+        "amountAtLeast": {
+          "A2": 15000
+        },
+        "amountAtMost": {
+          "A2": 50000
+        },
+        "forbiddenText": [
+          "위법입니다"
+        ],
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "P07-건강보험기준점이탈",
+      "group": "상수경계",
+      "desc": "건강보험료로 역산한 보수월액이 이번 달 급여와 크게 다르다. 대조의 기준점 자체를 의심해야 한다.",
+      "input": {
+        "skill": "payslip",
+        "value": {
+          "earnings": [
+            {
+              "label": "기본급",
+              "amount": 2500000
+            }
+          ],
+          "deductions": [
+            {
+              "label": "건강보험",
+              "amount": 150000
+            }
+          ],
+          "hours": {
+            "scheduled": 209,
+            "overtime": 0
+          },
+          "workplaceSize": "5인이상"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "A3",
+          "A6"
+        ],
+        "mustNotFire": [
+          "A2",
+          "A4",
+          "A5",
+          "B3"
+        ],
+        "levels": {
+          "A3": "확인필요",
+          "A6": "정상"
+        },
+        "guardViolations": 0
+      }
+    },
+    {
+      "id": "D16-스리랑카귀국비용제3군",
+      "group": "상수경계",
+      "desc": "귀국비용보험은 나라마다 낸 금액이 다르다. 스리랑카는 제3군 60만원이다.",
+      "input": {
+        "skill": "departure",
+        "value": {
+          "nationality": "스리랑카",
+          "visa": "E-9",
+          "hireDate": "2024-01-15",
+          "departureDate": "2026-03-15",
+          "monthlyWage": 2500000,
+          "today": "2026-01-15"
+        }
+      },
+      "expect": {
+        "mustFire": [
+          "S2-2",
+          "S2-3"
+        ],
+        "levels": {
+          "S2-2": "수령가능",
+          "S2-3": "수령가능"
+        },
+        "amountAtLeast": {
+          "S2-2": 600000
+        },
+        "amountAtMost": {
+          "S2-2": 600000
+        },
+        "guardViolations": 0
+      }
+    }
+  ]
+}

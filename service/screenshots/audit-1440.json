@@ -1,0 +1,128 @@
+[
+  {
+    "view": "monitor",
+    "label": "실행 모니터",
+    "status": "ok",
+    "buttons": 32,
+    "alive": 32,
+    "dead": 0,
+    "screenshot": "/Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/screenshots/1440/monitor.png"
+  },
+  {
+    "view": "agent-run",
+    "label": "Agent 실행",
+    "status": "ok",
+    "buttons": 22,
+    "alive": 22,
+    "dead": 0,
+    "screenshot": "/Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/screenshots/1440/agent-run.png"
+  },
+  {
+    "view": "audit",
+    "label": "감사 기록",
+    "status": "ok",
+    "buttons": 16,
+    "alive": 16,
+    "dead": 0,
+    "screenshot": "/Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/screenshots/1440/audit.png"
+  },
+  {
+    "view": "artifacts",
+    "label": "산출물",
+    "status": "ok",
+    "buttons": 18,
+    "alive": 18,
+    "dead": 0,
+    "screenshot": "/Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/screenshots/1440/artifacts.png"
+  },
+  {
+    "view": "standards-map",
+    "label": "기준 적합성 맵",
+    "status": "ok",
+    "buttons": 16,
+    "alive": 16,
+    "dead": 0,
+    "screenshot": "/Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/screenshots/1440/standards-map.png"
+  },
+  {
+    "view": "skills",
+    "label": "판정 스킬",
+    "status": "ok",
+    "buttons": 16,
+    "alive": 16,
+    "dead": 0,
+    "screenshot": "/Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/screenshots/1440/skills.png"
+  },
+  {
+    "view": "ontology",
+    "label": "온톨로지 T-Box·A-Box",
+    "status": "ok",
+    "buttons": 24,
+    "alive": 23,
+    "dead": 0,
+    "screenshot": "/Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/screenshots/1440/ontology.png"
+  },
+  {
+    "view": "org",
+    "label": "AI 조직도",
+    "status": "ok",
+    "buttons": 16,
+    "alive": 16,
+    "dead": 0,
+    "screenshot": "/Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/screenshots/1440/org.png"
+  },
+  {
+    "view": "queue",
+    "label": "상담 큐",
+    "status": "ok",
+    "buttons": 22,
+    "alive": 22,
+    "dead": 0,
+    "screenshot": "/Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/screenshots/1440/queue.png"
+  },
+  {
+    "view": "harness",
+    "label": "금융정착 Agent 하네스",
+    "status": "ok",
+    "buttons": 17,
+    "alive": 17,
+    "dead": 0,
+    "screenshot": "/Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/screenshots/1440/harness.png"
+  },
+  {
+    "view": "search",
+    "label": "근거/조문 검색",
+    "status": "ok",
+    "buttons": 16,
+    "alive": 16,
+    "dead": 0,
+    "screenshot": "/Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/screenshots/1440/search.png"
+  },
+  {
+    "view": "explain",
+    "label": "판단 해설",
+    "status": "ok",
+    "buttons": 16,
+    "alive": 16,
+    "dead": 0,
+    "screenshot": "/Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/screenshots/1440/explain.png"
+  },
+  {
+    "view": "scenarios",
+    "label": "시나리오 추천 큐",
+    "status": "ok",
+    "buttons": 29,
+    "alive": 29,
+    "dead": 0,
+    "screenshot": "/Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/screenshots/1440/scenarios.png"
+  },
+  {
+    "view": "approvals",
+    "label": "담당자/승인 권한",
+    "status": "ok",
+    "buttons": 20,
+    "alive": 20,
+    "dead": 0,
+    "screenshot": "/Users/leeseungbo/Desktop/[DACON]/금융 AI challenge/service/screenshots/1440/approvals.png"
+  }
+]

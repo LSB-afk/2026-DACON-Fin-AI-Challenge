@@ -1,0 +1,570 @@
+@import "tailwindcss";
+
+/**
+ * 하네스 콘솔 디자인 토큰.
+ *
+ * 바탕은 흰색, 강조는 파랑 한 색만 쓴다. 관제 화면이라 색이 늘어나면 정보가 아니라
+ * 소음이 된다. 그래서 크롬(내비·버튼·배지)은 파랑/흰색으로만 구성하고,
+ * **색으로 뜻을 갖는 것은 판정 수준뿐이다** (위법·기한임박·수령가능·확인필요·수령불가·정상).
+ *
+ * 값을 바꾸면 `node scripts/contrast.mjs` 를 돌려라. 이 파일의 hex 를 읽어
+ * 화면에서 실제로 겹치는 조합의 대비비를 재고, 미달이 하나라도 있으면 exit 1 이다.
+ * 눈으로 보면 4.3:1 과 4.6:1 을 구분하지 못한다.
+ *
+ * 다크 테마는 만들지 않는다(제출은 밝은 테마 하나). 다만 면 토큰은
+ * bg → panel → surface → line-soft → line 순으로 밝은 것에서 어두운 것으로,
+ * 글자 토큰은 ink → muted → muted-soft 순으로 진한 것에서 옅은 것으로 놓았다.
+ * 나중에 다크를 넣는다면 이 서열을 뒤집고 *-ink 만 밝은 쪽으로 바꾸면 된다.
+ */
+:root {
+  --bg: #ffffff;
+  --panel: #ffffff;
+  /* 흰 바탕 위에서 영역을 나눌 때만 쓰는 아주 옅은 면 */
+  --surface: #f6f9fd;
+  /*
+   * 경계선 3단 — 2026-08-27 에 전부 한 단계씩 진하게 내렸다.
+   * 원래 --line #e2e8f2 · --line-soft #f0f4f9 였는데, 실화면 지적이 "항목이 어디서
+   * 끝나는지 안 보인다"였다. 흰 바탕 위 1.1:1 짜리 선은 있으나 마나다.
+   * --line-strong 은 이때 새로 생겼다 — 섹션 제목 밑 굵은 괘선과 표 머리행처럼
+   * "여기서 단원이 바뀐다"를 말하는 자리 전용. 항목 사이 잔선에 쓰면 화면 전체가
+   * 창살이 되므로, 잔선은 --line-soft 그대로 둔다.
+   */
+  --line: #cdd7e4;
+  --line-soft: #e4eaf2;
+  --line-strong: #8b99af;
+  --ink: #101a2b;
+  --muted: #46556d;
+  /*
+   * 보조 글자 2단. 예전 값(--muted #5b6a82 · --muted-soft #687283)은 서로 1.13:1
+   * 차이라 사실상 한 색이었고, 화면에서 가장 작은 글자가 가장 옅었다.
+   * 그래서 --muted 를 7:1 급으로 내려 본문 보조 글자를 또렷하게 만들고,
+   * --muted-soft 는 예전 --muted 자리(5:1 급)로 내렸다 — 2단 서열이 실제로 보인다.
+   */
+  --muted-soft: #5b6a82;
+  --accent: #006eda; /* 브랜드 파랑 — 2026-08-31 사용자 지정. 흰 바탕 4.94:1(대비 스크립트가 검증) */
+  --accent-hover: #005bb8;
+  --accent-tint: #eef5fe;
+  --accent-tint-line: #c5defa;
+
+  /*
+   * 같은 색이라도 면에 쓸 때(3:1)와 글자에 쓸 때(4.5:1) 요구 대비가 다르다.
+   * 하나로 겸하면 반드시 한쪽이 미달한다. --accent 는 흰 바탕 위 글자로는
+   * 5.10:1 로 버티지만 --accent-tint(옅은 파랑) 위에서는 4.65:1 까지 떨어지고,
+   * 여기서 색을 조금만 밝히면 바로 미달로 넘어간다. 옅은 면 위 글자는
+   * 아래 *-ink 를 쓴다. 면과 테두리에만 본색을 쓴다.
+   */
+  --accent-ink: #005bb8;
+
+  /*
+   * 상태 3벌. 한 벌은 셋이 한 몸이다 —
+   *   본색  = 테두리·상태 점 같은 비텍스트 (--bg 와 그 벌의 soft 면 양쪽에서 3:1)
+   *   -soft = 카드 바탕이 되는 옅은 면
+   *   -ink  = 그 soft 면과 흰 바탕 위에 얹는 글자 (4.5:1)
+   * app/ 안에 tailwind 팔레트 색(amber-50, red-200 …)은 이제 한 자리도 없다.
+   * 새로 넣지 마라 — 팔레트 색은 이 파일이 바뀌어도 따라오지 않아서,
+   * 색을 한 번 조정하면 그 카드만 옛 색으로 남는다.
+   * 지키는 장치: scripts/scan.mjs 가 아니라 CI 의 grep(아래 npm run ci 사슬)과
+   * scripts/contrast.mjs 의 조합표다. 조합표는 토큰 이름으로만 적혀 있어서
+   * 하드코딩한 자리는 애초에 검사 대상에 들어오지 못한다.
+   */
+  --good: #1a7a4d;
+  --good-soft: #eaf6ef;
+  --good-ink: #146341;
+  --warning: #a76a00;
+  --warning-soft: #fdf3e3;
+  --warning-ink: #8a5600;
+  --bad: #cf2f36;
+  --bad-soft: #fdeeef;
+  --bad-ink: #b3252b;
+  /*
+   * 분류 색 두 벌 (2026-09-02) — 상담 사례 배지용. 위 셋(좋음·경고·나쁨)은 판정 수준이
+   * 쓰는 뜻 있는 색이라, 뜻 없는 '종류 구분'에 빌려 쓰면 색의 문법이 흐려진다.
+   * 보라·청록은 판정 어디에도 안 쓰이므로 종류 구분 전용이다. 옅은 면 위 잉크 대비:
+   * violet-ink #4f36a3 / #f1edfb ≈ 7.4:1, teal-ink #0d6363 / #e4f4f3 ≈ 7.0:1.
+   */
+  --violet: #6b4fd8;
+  --violet-soft: #f1edfb;
+  --violet-ink: #4f36a3;
+  --teal: #12908f;
+  --teal-soft: #e4f4f3;
+  --teal-ink: #0d6363;
+
+  /* 초점 링. 파랑 계열 중 가장 진해서 흰 면·옅은 면·회색 면 어디에 놓아도 3:1 을 넘는다 */
+  --focus: #0055ab;
+
+  --shadow-1: 0 1px 2px rgb(16 26 43 / 5%), 0 1px 3px rgb(16 26 43 / 7%); /* 카드 */
+  --shadow-2: 0 4px 14px rgb(16 26 43 / 12%); /* 떠 있는 것 — 팝오버·드롭다운 */
+
+  /*
+   * 반경은 다섯 단계로 끊고 그 사이 값을 쓰지 않는다.
+   * 단 10px 미만 그래픽 마커(상태 점, 작은 도형, 키캡)는 이 스케일 밖이다 —
+   * 이 줄이 없으면 다음 사람이 `border-radius: 2px` 를 스케일 위반으로 오해하고 고친다.
+   */
+  --radius-s: 6px; /* 입력·태그·칩 */
+  --radius-m: 10px; /* 작은 카드·목록 항목 */
+  --radius-card: 14px; /* 패널 카드 */
+  --radius-l: 16px; /* 다이얼로그 */
+  --radius-pill: 999px; /* 한 줄짜리 상태 알약 */
+
+  /* 모션 토큰 — 관제 화면이라 전체 320ms 이하, 흔들림/튕김 금지 */
+  --dur-fast: 120ms;
+  --dur-base: 240ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-muted-soft: var(--muted-soft);
+  --color-accent: var(--accent);
+  --color-accent-tint: var(--accent-tint);
+  --color-accent-tint-line: var(--accent-tint-line);
+  --font-mono: var(--font-geist-mono);
+
+  /*
+   * 글자 크기 사다리 — 기본 스케일을 한 단계씩 키운다 (2026-08-27).
+   * 실화면 지적: 12px(text-xs) 70곳 · 14px(text-sm) 57곳이 화면을 지배해서
+   * 전부 잔글씨로 읽혔다. 클래스 137곳을 바꾸는 대신 스케일 정의를 바꾼다 —
+   * 같은 클래스 이름이 그대로 더 큰 글자를 뜻하게 된다.
+   *   text-2xs 12px — 바닥. 이 밑은 없다 (한글은 11px 밑에서 획이 뭉개진다)
+   *   text-xs  13px — 보조 설명·표 안 글자
+   *   text-sm  15px — 본문
+   *   text-lg  19px — 카드 제목
+   */
+  --text-2xs: 0.75rem;
+  --text-2xs--line-height: 1.45;
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.5;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.55;
+  --text-lg: 1.1875rem;
+  --text-lg--line-height: 1.4;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  /* Pretendard는 자체 호스팅. 로드에 실패해도 시스템 한글 폰트로 떨어진다. */
+  font-family:
+    "Pretendard Variable", Pretendard, -apple-system, "Apple SD Gothic Neo",
+    "Malgun Gothic", sans-serif;
+  /* 한글에서 자간이 벌어져 보이는 것을 조금 죈다 */
+  letter-spacing: -0.01em;
+  /*
+   * 한글 어절 보존 — "근로자용"이 "근로자/용"으로 갈라지던 문제의 근본 수정.
+   * keep-all은 어절 안에서 줄을 자르지 않고, break-word는 컨테이너보다 긴
+   * 토큰(URL 등)이 넘치지 않게 하는 표준 짝이다.
+   */
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  /* 굵기 사다리: 본문 기본을 400→500으로 한 단계 올린다. 얇아서 안 읽히는 문제 해결 */
+  font-weight: 500;
+  /* Pretendard Variable이므로 400~800 전 구간 가능 */
+}
+
+/**
+ * 굵기 사다리 — 전 화면 일관 적용 (Pretendard Variable 가정)
+ * 화면 제목 800 / 카드 첫 줄·금액·D-day·표 머리 700 / 보조 강조 600 / 본문 500
+ * globals.css 한 곳에서 사다리를 정의한다 — 개별 컴포넌트는 이 값을 참조한다.
+ *
+ * Tailwind의 font-bold(700) 등을 그대로 두되, 제목 자리에만 800을 강제한다.
+ * 제목은 h1/h2 또는 .text-xl/.text-2xl 과 함께 쓰이는 font-bold이다.
+ */
+h1.font-bold,
+h2.font-bold,
+.text-2xl.font-bold,
+.text-xl.font-bold {
+  font-weight: 800;
+}
+/* 카드 첫 줄·금액·D-day·표 머리는 기존 font-bold/font-semibold 유지 (700/600) */
+/* 본문은 body 500이 기본 — font-normal(400)이 필요한 곳은 명시적으로 400을 준다 */
+
+/* 선: --line-strong 2px 괘선은 화면 전환·소제목·표 머리에 빠짐없이.
+   이미 .SubHead, .Wrap 등에 border-t-2 border-[var(--line-strong)]가 있으나,
+   테이블 머리(th)와 카드 구분선이 흐릿한 곳은 테두리를 한 단계 진하게 한다. */
+table thead th {
+  border-bottom-width: 2px;
+  border-color: var(--line-strong);
+}
+/* 카드 경계가 흐린 곳(lined soft로 둔 곳)은 진하게 — 카드 컨테이너는 항상 line으로 */
+.rounded-\[var\(--radius-card\)\].border,
+.rounded-\[var\(--radius-m\)\].border,
+.rounded-lg.border {
+  border-color: var(--line);
+}
+
+/* ── 모션 시스템 — CSS 전용, 라이브러리 금지 ── */
+
+@keyframes motion-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes motion-pulse-border {
+  0%, 100% { border-color: var(--line); }
+  50% { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
+}
+@keyframes motion-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@keyframes motion-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 단계 타임라인 — 위에서 순서대로 stagger, 진행 중 펄스, 완료 accent, 차단 warning */
+.motion-stage {
+  animation: motion-fade-in var(--dur-base) var(--ease) both;
+}
+.motion-stage--pulse {
+  animation: motion-pulse-border 1.5s var(--ease) infinite, motion-fade-in var(--dur-base) var(--ease) both;
+}
+.motion-stage__line {
+  transition: background var(--dur-base) var(--ease), width var(--dur-base) var(--ease);
+}
+
+/* 판정 카드 stagger-in — cap 8 */
+.motion-card {
+  animation: motion-fade-in var(--dur-base) var(--ease) both;
+}
+
+/* 뷰·탭 전환 fade 120ms */
+.motion-fade {
+  animation: motion-fade-in var(--dur-fast) var(--ease) both;
+}
+
+/* 번역 중 shimmer — 말풍선 위에 얇은 빛 */
+.motion-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.motion-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+  transform: translateX(-100%);
+  animation: motion-shimmer 1.2s var(--ease) infinite;
+}
+
+/* 버튼 press + 스피너 */
+.motion-press:active { transform: scale(0.98); }
+.motion-press { transition: transform var(--dur-fast) var(--ease); }
+.motion-spin {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: motion-spin 0.6s linear infinite;
+}
+
+/*
+ * ── 페이전트 캐릭터 — 3D 무대 ──
+ *
+ * 구조가 곧 규칙이다:
+ *   .paygent-btn(원근·히트박스) > .paygent-shadow(바닥 그림자 — 캐릭터와 따로 산다)
+ *                               + .paygent-tilt(마우스 틸트) > .paygent-body(동작 애니메이션) > img
+ * 그림자를 body 밖에 두는 이유 — 점프 애니메이션이 body를 들어올릴 때 그림자까지
+ * 같이 떠오르면 "공중부양하는 상자"가 된다. 바닥은 바닥에 남아야 3D로 읽힌다.
+ * reduced-motion에서는 전역 규칙이 애니메이션을 전부 끈다.
+ */
+.paygent-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  perspective: 700px;
+}
+.paygent-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 12px; }
+
+.paygent-tilt {
+  display: block;
+  transform: rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg));
+  transition: transform 120ms var(--ease);
+  transform-style: preserve-3d;
+}
+.paygent-body { display: block; transform-origin: center bottom; transform-style: preserve-3d; }
+
+.paygent-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 58%;
+  height: 12%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(15, 23, 42, 0.3), transparent 70%);
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: paygent-shadow-idle var(--dur, 2.8s) ease-in-out infinite;
+}
+@keyframes paygent-shadow-idle {
+  0%, 100% { transform: translateX(-50%) scaleX(1); opacity: 0.9; }
+  50% { transform: translateX(-50%) scaleX(0.78); opacity: 0.55; }
+}
+
+/* idle — 공중부양 + 느린 rotateY 흔들림. 그림자는 위에서 반대로 숨쉰다 */
+@keyframes paygent-idle {
+  0%, 100% { transform: translateY(0) rotateY(-6deg); }
+  50% { transform: translateY(-7px) rotateY(6deg); }
+}
+.paygent-idle { animation: paygent-idle var(--dur, 2.8s) ease-in-out infinite; }
+
+/* 점프 — 상승 스트레치, 착지 스쿼시. 눌림이 무게를 만든다 */
+@keyframes paygent-jump {
+  0% { transform: translateY(0) scaleX(1) scaleY(1); }
+  30% { transform: translateY(-26px) scaleX(0.96) scaleY(1.06); }
+  55% { transform: translateY(0) scaleX(1.14) scaleY(0.8); }
+  72% { transform: translateY(-9px) scaleX(0.98) scaleY(1.03); }
+  86% { transform: translateY(0) scaleX(1.05) scaleY(0.95); }
+  100% { transform: translateY(0) scaleX(1) scaleY(1); }
+}
+.paygent-jump { animation: paygent-jump 620ms var(--ease) both; }
+
+/* 슬라이드 — 이동 방향으로 몸을 기울인다 (rotateY 리드) */
+@keyframes paygent-slide {
+  0% { transform: translateX(0) rotateY(0); }
+  22% { transform: translateX(-18px) rotateY(-26deg); }
+  48% { transform: translateX(16px) rotateY(26deg); }
+  72% { transform: translateX(-7px) rotateY(-12deg); }
+  100% { transform: translateX(0) rotateY(0); }
+}
+.paygent-slide { animation: paygent-slide 560ms var(--ease) both; }
+
+/* 스핀 — 평면 회전이 아니라 턴테이블(rotateY 360°) */
+@keyframes paygent-spin {
+  0% { transform: rotateY(0deg); }
+  100% { transform: rotateY(360deg); }
+}
+.paygent-spin { animation: paygent-spin 650ms var(--ease) both; }
+
+/* 흔들기 — rotateZ 워블에 rotateX 끄덕임을 살짝 */
+@keyframes paygent-shake {
+  0%, 100% { transform: rotateZ(0) rotateX(0); }
+  15% { transform: rotateZ(-6deg) rotateX(4deg); }
+  30% { transform: rotateZ(6deg) rotateX(-3deg); }
+  45% { transform: rotateZ(-4deg) rotateX(3deg); }
+  60% { transform: rotateZ(4deg) rotateX(-2deg); }
+  75% { transform: rotateZ(-2deg) rotateX(1deg); }
+}
+.paygent-shake { animation: paygent-shake 520ms var(--ease) both; }
+
+/* 축하 — 이단 점프 + 마지막 팝. 착지마다 스쿼시 */
+@keyframes paygent-celebrate {
+  0% { transform: translateY(0) scaleY(1); }
+  16% { transform: translateY(-24px) scaleY(1.06); }
+  30% { transform: translateY(0) scaleX(1.1) scaleY(0.86); }
+  46% { transform: translateY(-18px) scaleY(1.05); }
+  60% { transform: translateY(0) scaleX(1.08) scaleY(0.9); }
+  76% { transform: scale(1.1) rotateY(12deg); }
+  100% { transform: scale(1) rotateY(0); }
+}
+.paygent-celebrate { animation: paygent-celebrate 900ms var(--ease) both; }
+
+/* 드래그 — 집으면 커서와 확대가 상태를 말한다. 놓기 착지는 jump 재사용 */
+.paygent-dragging { cursor: grabbing !important; }
+.paygent-dragging .paygent-body { transform: scale(1.06); }
+
+/* 원터치 하이라이트 — 페이전트가 데려다준 자리를 잠깐 밝힌다 (G5 승인 패널 등) */
+@keyframes paygent-highlight-anim {
+  0%, 55% { box-shadow: 0 0 0 4px var(--accent-tint), 0 0 0 6px var(--accent); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); }
+}
+.paygent-highlight { animation: paygent-highlight-anim 2.4s var(--ease) both; }
+
+.paygent-spark {
+  position: absolute;
+  font-size: 14px;
+  color: var(--accent);
+  pointer-events: none;
+}
+.paygent-spark--a { top: 8%; right: 10%; animation: paygent-spark 700ms var(--ease) both; }
+.paygent-spark--b { top: 18%; left: 8%; animation: paygent-spark 700ms var(--ease) 120ms both; }
+@keyframes paygent-spark {
+  0% { transform: scale(0) rotate(0deg); opacity: 0; }
+  40% { transform: scale(1.2) rotate(12deg); opacity: 1; }
+  100% { transform: scale(0) rotate(-12deg); opacity: 0; }
+}
+
+@keyframes paygent-enter-anim {
+  from { transform: translateY(56px) scale(0.92); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+.paygent-enter { animation: paygent-enter-anim 520ms var(--ease) both; }
+
+/*
+ * 콘솔 첫 진입 자기소개 — 캐릭터 둘레가 세 번 맥동한다. "저 여기 있어요"를 색이 아니라
+ * 움직임으로 말한다. reduced-motion 에서는 전역 규칙이 애니메이션을 끄므로 말풍선만 남는다.
+ */
+@keyframes paygent-intro-ring-anim {
+  0% { box-shadow: 0 0 0 0 rgba(0, 110, 218, 0.45); }
+  70% { box-shadow: 0 0 0 18px rgba(0, 110, 218, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 110, 218, 0); }
+}
+.paygent-intro .paygent-btn {
+  border-radius: 50%;
+  animation: paygent-intro-ring-anim 1.3s ease-out 3;
+}
+
+/* 입장 카드 stagger */
+.paygent-card { animation: motion-fade-in var(--dur-base) var(--ease) both; }
+
+/*
+ * 입장 씬 — 인사하면 캐릭터 열이 가운데서 왼쪽 열로 미끄러진다.
+ * 시작 오프셋 = 무대 중심 − 왼쪽 열 중심. 무대 폭은 min(72rem, 100vw − 2rem)이고
+ * 왼쪽 열 중심은 무대 왼쪽 끝 + 180px 이므로, 오프셋은 min(36rem, 50vw − 1rem) − 180px.
+ * 오른쪽 상자들은 캐릭터가 거의 도착한 뒤(지연 260ms) 나타난다 — 둘이 동시에
+ * 움직이면 무엇이 무엇을 밀어냈는지 읽히지 않는다.
+ */
+@keyframes paygent-shift-left-anim {
+  from { transform: translateX(calc(min(36rem, 50vw - 1rem) - 180px)); }
+  to { transform: translateX(0); }
+}
+/* 2열이 되는 1024px 이상에서만 — 세로 쌓임에서는 옮길 자리가 없다 */
+@media (min-width: 1024px) {
+  .paygent-shift-left { animation: paygent-shift-left-anim 520ms var(--ease) both; }
+}
+.paygent-dash-enter { animation: motion-fade-in var(--dur-base) var(--ease) 260ms both; }
+
+/* 말풍선 팝 */
+@keyframes paygent-pop {
+  from { transform: scale(0.96) translateY(4px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+.paygent-pop { animation: paygent-pop 240ms var(--ease) both; }
+
+/*
+ * 에이전트 사무실 — CSS 3D(rotateX 기울임·카드 방·복제 미니 캐릭터) 시절의
+ * 규칙은 전부 은퇴했다 (2026-08-29). 지금은 app/_officeCanvas.tsx 가 고정
+ * 탑다운 카메라의 Canvas 2D로 그린다 — 여기 남길 스타일이 없다.
+ */
+
+/*
+ * ── 영수증 — 돈을 말하는 화면의 종이 문법 (사용자 화면 ③) ──
+ * 감열지 영수증의 규칙만 빌린다: 절취 톱니, 점선 괘, 우측 정렬 고정폭 숫자.
+ * 톱니는 종이색(흰) 삼각형 타일 — 뒤의 --surface 필드가 있어야 보인다.
+ */
+.receipt-field {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+.receipt-paper {
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(16, 26, 43, 0.08), 0 10px 24px -14px rgba(16, 26, 43, 0.3);
+  font-variant-numeric: tabular-nums;
+}
+.receipt-zigzag {
+  height: 8px;
+  background-size: 12px 8px;
+  background-repeat: repeat-x;
+}
+.receipt-zigzag--top {
+  background-image:
+    linear-gradient(135deg, #ffffff 50%, transparent 50%),
+    linear-gradient(225deg, #ffffff 50%, transparent 50%);
+}
+.receipt-zigzag--bottom {
+  background-image:
+    linear-gradient(45deg, #ffffff 50%, transparent 50%),
+    linear-gradient(315deg, #ffffff 50%, transparent 50%);
+}
+.receipt-dash {
+  border-top: 1.5px dashed var(--line-strong);
+}
+
+/** 영문 소캡 섹션 라벨 — 한글 제목 위에 놓는 이중 헤더. 11px 밑으로 내리지 않는다 */
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-soft);
+  font-weight: 700;
+}
+
+/*
+ * 초점 링. 브라우저 기본 링은 파란 면(활성 탭·기본 버튼) 위에서 거의 안 보인다.
+ * offset 을 주는 이유: 링이 요소 테두리에 붙으면 테두리와 섞여 한 줄로 읽힌다.
+ */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/*
+ * 화면 크기 컨테이너에는 링을 그리지 않는다.
+ * page.tsx 의 `h-screen` 골격과 그 안의 스크롤 영역(main·aside·nav)은 크롬이
+ * 키보드 스크롤용으로 초점을 주는데, 링을 그리면 화면 전체에 파란 테두리가 생겨
+ * "무엇이 선택됐는지"가 오히려 사라진다.
+ * 알려진 한계: 이 컨테이너를 화살표 키로 스크롤하는 동안은 초점 표시가 없다.
+ * 안에 있는 버튼·링크가 초점을 받으면 그때는 링이 보인다.
+ */
+main:focus-visible,
+aside:focus-visible,
+nav:focus-visible,
+.h-screen:focus-visible {
+  outline: none;
+}
+
+/*
+ * 강제 색상 모드(윈도우 고대비). 저자가 지정한 색은 전부 사용자 팔레트로 덮인다.
+ * 그래서 **면 색으로만 뜻을 내던 것은 통째로 사라진다** — 활성 탭, 선택된 항목,
+ * 판정 카드의 옅은 바탕이 전부 같은 흰 면이 된다.
+ * 형태(테두리)와 글자는 살아남으므로, 사라지는 자리에 시스템 색과 테두리를 다시 준다.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .motion-shimmer::after { display: none; }
+}
+
+@media (forced-colors: active) {
+  /* 활성 탭 — 배경 파랑 + 흰 글자가 유일한 단서였다 */
+  [aria-current="page"] {
+    background: Highlight;
+    color: HighlightText;
+    forced-color-adjust: none;
+  }
+
+  /*
+   * 파란 면 하나로 서 있던 기본 버튼·다운로드 링크. 테두리가 없어서 강제 색상 모드에서는
+   * 그냥 글자 한 줄이 되고, 누를 수 있는 것인지 알 수 없다. 윤곽을 다시 준다.
+   * class 문자열로 고르는 이유: 이 자리들이 컴포넌트가 아니라 tailwind 유틸리티라
+   * 걸 수 있는 선택자가 이것뿐이다. _ui.tsx 에서 이 클래스를 바꾸면 여기도 바꿔야 한다.
+   *
+   * 테두리 색을 다시 지정하지는 않는다 — 강제 색상 모드는 border-color 를 이미
+   * 사용자 팔레트로 덮는다. 여기서 CanvasText 를 덧칠하면 자리만 잡아 두려고 투명하게
+   * 둔 테두리까지 전부 선으로 그려져, 선택되지 않은 행에도 윤곽이 생긴다.
+   * (한때 케이스 목록의 border-l-transparent 가 그렇게 걸렸다. 그 코드는 지웠지만
+   *  투명 테두리로 자리를 잡는 방식 자체는 흔해서 이 규칙은 그대로 둔다.)
+   */
+  [class*="bg-[var(--accent)]"] {
+    border: 1px solid ButtonText;
+  }
+
+  :focus-visible {
+    outline-color: Highlight;
+  }
+}
+
+/*
+ * 위 [aria-current="page"] 규칙이 실제로 걸리는 자리는 _ui.tsx 두 곳뿐이다 —
+ * 좌측 메뉴 행(_ui.tsx:122)과 케이스 목록 행(_ui.tsx:427).
+ * 새로 "선택됨"을 표시하는 자리를 만들 때 aria-current 를 빠뜨리면 강제 색상 모드에서
+ * 그 표시가 통째로 사라진다(면 색이 유일한 단서가 되므로). 아무 테스트도 이걸 잡지 않는다.
+ *
+ * 알려진 한계 — 실제 윈도우 고대비 모드에서 눈으로 확인하지 못했다(맥에는 그 모드가 없다).
+ * 규칙은 MDN 이 권장하는 시스템 색 키워드 방식만 따랐다.
+ */

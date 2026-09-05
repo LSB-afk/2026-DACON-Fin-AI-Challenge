@@ -1,0 +1,29 @@
+.DS_Store
+.omx/
+.env
+.env.*
+!.env.example
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+dist/
+build/
+*.log
+
+# 제출용 압축 파일은 최종 확정본만 별도로 보관
+*.zip
+*.7z
+
+# Next.js
+service/.next/
+service/out/
+service/next-env.d.ts
+*.tsbuildinfo
+
+# 도구 런타임 상태 (실행 중 계속 쓰여서 인덱싱이 깨진다)
+.omc/state/
+
+# 브라우저 자동화 산출물
+.playwright-mcp/
