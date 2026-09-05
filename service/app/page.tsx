@@ -17,10 +17,10 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { cases, getCase } from "@/lib/cases";
+import { cases, getCase, type Case } from "@/lib/cases";
 import { routeByKeyword, needsClarification, getSkill } from "@/lib/skills";
 import { judgePayslip, type Payslip, type WorkplaceSize } from "@/lib/rules/payslip";
-import { judgeDeparture, type Visa } from "@/lib/rules/departure";
+import { judgeDeparture, type DepartureInput, type Visa } from "@/lib/rules/departure";
 import { moneyTotals, type Finding } from "@/lib/rules/types";
 import { samples } from "@/lib/samples";
 import { verifyCounts } from "@/lib/standards";
@@ -52,6 +52,7 @@ import {
   Eyebrow,
   Icon,
   Pill,
+  Sentences,
   useNarrow,
   navGroupOf,
   badgeTone,
@@ -111,6 +112,16 @@ export default function Console() {
   const [view, setView] = useState<ViewId>("user");
   const [tab, setTab] = useState<MonitorTab>("findings");
   const [caseId, setCaseId] = useState(cases[0].id);
+  /*
+   * 상담 큐의 주인은 사용자다 (2026-09-05). 픽스처 6건은 운영·관리 → 상담 사례 목록에만
+   * 남기고, 판정 결과 보기의 큐에는 내 급여 확인하기에서 넘어온 입력(userCase)과
+   * 사용자가 목록·시나리오에서 직접 고른 케이스만 놓는다. casePicked 가 false 인 동안
+   * (아직 아무것도 고르지 않음) 본문은 빈 상태 안내를 보인다. caseId 자체는 판정
+   * 파이프라인의 초기값으로 계속 유효해야 하므로 픽스처 첫 건을 유지한다.
+   */
+  const [userCase, setUserCase] = useState<Case | null>(null);
+  const [casePicked, setCasePicked] = useState(false);
+  const findCase = (id: string): Case => (userCase && userCase.id === id ? userCase : getCase(id));
   // ── 페이전트 입장·동행 상태 (세션 메모리만 — localStorage 금지) ──
   const [entrance, setEntrance] = useState(true);
   const [entranceGreeted, setEntranceGreeted] = useState(false);
@@ -221,7 +232,7 @@ export default function Console() {
   const [navOpenGroups, setNavOpenGroups] = useState<Partial<Record<NavGroupId, boolean>>>({});
   const [propsOpen, setPropsOpen] = useState(true);
 
-  const c = getCase(caseId);
+  const c = findCase(caseId);
 
   const [nationality, setNationality] = useState(
     c.departure?.nationality ?? "베트남",
@@ -273,9 +284,11 @@ export default function Console() {
     v: number,
   ) => setPayslipDraft((d) => ({ ...d, hours: { ...d.hours, [hk]: v } }));
 
-  function selectCase(id: string) {
-    const n = getCase(id);
+  /** known — 방금 만든 케이스는 아직 상태에 없으므로 직접 넘긴다 */
+  function selectCase(id: string, known?: Case) {
+    const n = known ?? findCase(id);
     setCaseId(id);
+    setCasePicked(true);
     setRan(false);
     setTab("findings");
     if (n.departure) {
@@ -288,6 +301,33 @@ export default function Console() {
     if (n.workplaceSize) setSize(n.workplaceSize);
     setPayslipDraft(명세서초안(n.payslipSampleId ?? "02"));
   }
+
+  /**
+   * 내 급여 확인하기 → 상담 큐. 입력 다섯 칸을 그대로 케이스로 만들어 큐에 넣고 선택한다.
+   * 발화는 라우팅 트리거(출국·귀국비용·국민연금)를 품은 고정 문장이다 — 입력값을
+   * 발화에 섞으면 "월급" 같은 단어가 급여명세서 스킬까지 불러 라우팅이 모호해진다.
+   * 입력값은 summary 와 departure 에 실린다.
+   */
+  function submitUserCase(d: Omit<DepartureInput, "today">) {
+    const uc: Case = {
+      id: "U-01",
+      badge: "내 입력",
+      utterance: "출국 전에 받을 돈(출국만기보험·귀국비용보험·국민연금)을 확인하고 싶어요",
+      summary: `${d.nationality} · ${d.visa} · ${d.hireDate}부터 ${d.departureDate}까지 · 월급 ${d.monthlyWage.toLocaleString("ko-KR")}원. 내 급여 확인하기에서 입력한 내용입니다.`,
+      kind: "departure",
+      demonstrates: "사용자가 직접 입력한 상황을 그대로 판정합니다. 같은 입력이면 언제나 같은 결과가 나옵니다.",
+      departure: d,
+      source: "user",
+    };
+    setUserCase(uc);
+    selectCase(uc.id, uc);
+  }
+
+  /* 큐에 보이는 것 — 사용자 케이스 + (목록·시나리오에서 고른) 현재 케이스. 중복은 하나로 */
+  const queueCases: Case[] = [
+    ...(userCase ? [userCase] : []),
+    ...(casePicked && c.id !== userCase?.id ? [c] : []),
+  ];
 
   const routes = useMemo(() => routeByKeyword(c.utterance), [c.utterance]);
   const 모호 = needsClarification(routes);
@@ -804,6 +844,12 @@ export default function Console() {
         break;
       case "run-judge":
         // 판정은 순수 계산이라 대행해도 안전하다 — 페이전트가 실제로 실행한다
+        if (!casePicked) {
+          // 아직 큐에 상담이 없다 — 내 급여 확인하기의 입력으로 판정하고, 그 입력이 큐로 온다
+          setView("user");
+          setUserAutoRunKey((k) => k + 1);
+          break;
+        }
         setView("monitor");
         setTab("findings");
         run();
@@ -962,10 +1008,14 @@ export default function Console() {
               className={`paygent-pop absolute bottom-1 w-[280px] max-w-[70vw] rounded-xl border-2 border-[var(--accent)] bg-[var(--panel)] px-3 py-2.5 shadow-[var(--shadow-2)] ${pgSide === "left" ? "right-full mr-2" : "left-full ml-2"}`}
             >
               <p className="text-xs font-bold">저 여기 있어요! 페이전트예요.</p>
-              <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
-                누르면 지금 할 일을 알려드려요.
-                {!narrow && " 마우스로 잡아서 아무 데나 옮길 수 있어요. 새로고침하면 제자리로 돌아와요."}
-              </p>
+              {/* 한 문장 = 한 줄 (2026-09-05) — 문장 둘이 한 줄에 이어지면 끊김이 안 보인다 */}
+              <Sentences
+                className="mt-1 text-xs leading-relaxed text-[var(--muted)]"
+                text={
+                  "누르면 지금 할 일을 알려드려요." +
+                  (!narrow ? " 마우스로 잡아서 아무 데나 옮길 수 있어요. 새로고침하면 제자리로 돌아와요." : "")
+                }
+              />
               <button
                 onClick={endIntro}
                 className="mt-2 rounded-md bg-[var(--accent)] px-2.5 py-1 text-xs font-bold text-white hover:bg-[var(--accent-hover)] motion-press"
@@ -979,7 +1029,7 @@ export default function Console() {
               role="status"
               className={`paygent-pop absolute bottom-1 w-[260px] max-w-[70vw] rounded-xl border border-[var(--line)] bg-[var(--panel)] px-3 py-2.5 shadow-[var(--shadow-2)] ${pgSide === "left" ? "right-full mr-2" : "left-full ml-2"}`}
             >
-              <p className="text-xs font-semibold leading-relaxed">{quest.quest}</p>
+              <Sentences className="text-xs font-semibold leading-relaxed" text={quest.quest} />
               <div className="mt-1.5 flex items-center gap-2">
                 <button
                   onClick={() => runAct(quest.goal)}
@@ -1001,9 +1051,9 @@ export default function Console() {
                 </button>
               </div>
               {celebrateMsg && (
-                <p role="status" className="mt-1.5 rounded-md border border-[var(--accent-tint-line)] bg-[var(--accent-tint)] px-2 py-1 text-xs font-bold text-[var(--accent)]">
-                  {celebrateMsg}
-                </p>
+                <div role="status" className="mt-1.5 rounded-md border border-[var(--accent-tint-line)] bg-[var(--accent-tint)] px-2 py-1 text-xs font-bold text-[var(--accent)]">
+                  <Sentences text={celebrateMsg} />
+                </div>
               )}
             </div>
           )}
@@ -1162,9 +1212,16 @@ export default function Console() {
     /* 무대 2막 — 인사도 했고 언어도 골랐다. 이때부터 2열(캐릭터 왼쪽 · 오른쪽 사용법) */
     const stage2 = entranceGreeted && langChosen;
     const tutorialActive = stage2;
+    /*
+     * 무대 1막 (2026-09-05) — 인사는 했고 언어는 아직. 캐릭터가 왼쪽으로 살짝 걸어가고
+     * 인사 말풍선이 캐릭터 **오른쪽**에 붙는다. 예전처럼 말풍선을 캐릭터 아래에 쌓으면
+     * 언어 선택판까지 합쳐 첫 화면에 스크롤바가 생겼다 — 첫 화면은 한 화면 안에서 끝난다.
+     */
+    const stage1 = entranceGreeted && !langChosen;
     return (
       /* 흰 무대 — 콘솔과 같은 면 문법. 어두운 무대는 캐릭터 blend·대비 둘 다 어긋났다 */
-      <div className="flex min-h-screen flex-col items-center bg-[var(--bg)] px-4 pb-6 pt-16 text-[var(--ink)] min-[1024px]:pt-20">
+      /* 1막(언어 선택)은 세로가 가장 길다 — 위 여백을 줄여 노트북 높이(~660px)에서도 스크롤을 피한다 */
+      <div className={`flex min-h-screen flex-col items-center bg-[var(--bg)] px-4 pb-4 text-[var(--ink)] ${stage1 ? "pt-8 min-[1024px]:pt-10 [@media(max-height:760px)]:pb-3 [@media(max-height:760px)]:pt-6" : "pt-16 min-[1024px]:pt-20"}`}>
         {translatorUi}
         {/* 워드마크 — smoke 조건. 제품명은 번역하지 않는다 */}
         {/* 워드마크는 첫 화면의 주인공이다 — 콘솔 제목(2xl)보다 두 단계 크게, 부제는 본문보다 크게 */}
@@ -1186,25 +1243,31 @@ export default function Console() {
          * 인사 전 정렬 사고(옛 self-start 클래스가 flex-col 무대에도 붙어 왼쪽으로 쏠림)는
          * 인사 전 상태에 그리드 클래스를 아예 주지 않는 것으로 막는다.
          */}
-        <div className={`mx-auto mt-12 w-full max-w-6xl ${stage2 ? "grid gap-8 min-[1024px]:grid-cols-[360px_1fr] min-[1024px]:items-center" : "flex flex-col items-center"}`}>
-          <div className={`flex w-full max-w-md flex-col items-center justify-self-center ${stage2 ? "paygent-shift-left" : ""}`}>
-            <div className="paygent-enter">
+        <div className={`mx-auto w-full max-w-6xl ${stage2 ? "mt-12 grid gap-8 min-[1024px]:grid-cols-[360px_1fr] min-[1024px]:items-center" : stage1 ? "mt-6 flex flex-col items-center" : "mt-12 flex flex-col items-center"}`}>
+          {/* 1막은 가로 행(캐릭터 · 말풍선), 그 전후는 세로 열. 640px 미만은 자리가 없어 세로로 쌓인다 */}
+          <div className={`flex w-full items-center justify-self-center ${stage1 ? "max-w-2xl flex-col justify-center gap-4 min-[640px]:flex-row min-[640px]:gap-8" : "max-w-md flex-col"} ${stage2 ? "paygent-shift-left" : ""}`}>
+            {/* 낮은 화면(노트북 ~660px)에서는 1막의 캐릭터를 조금 줄여 언어판까지 한 화면에 넣는다 */}
+            <div className={`paygent-enter ${stage1 ? "paygent-nudge-left shrink-0 [@media(max-height:760px)]:scale-75 [@media(max-height:760px)]:-my-5" : ""}`}>
               <Paygent size="large" celebrateKey={paygentCelebrateKey} label="페이전트 — 눌러보세요" onAction={() => setEntranceGreeted(true)} />
             </div>
             {!entranceGreeted ? (
               <p className="mt-4 text-sm text-[var(--muted)]">{T.tapHint}</p>
             ) : (
-              <>
-                {/* 말풍선 — 튜토리얼 중에는 페이전트가 그 장의 대사를 한다 */}
-                <div role="status" className="paygent-pop mt-4 w-full max-w-md rounded-xl border border-[var(--line)] bg-[var(--panel)] px-4 py-3 text-sm leading-relaxed text-[var(--ink)] shadow-[var(--shadow-2)]">
+              <div className={`flex w-full flex-col ${stage1 ? "min-w-0 flex-1 items-start" : "max-w-md items-center"}`}>
+                {/* 말풍선 — 튜토리얼 중에는 페이전트가 그 장의 대사를 한다. 1막에서는 캐릭터 오른쪽 */}
+                <div role="status" className={`paygent-pop w-full max-w-md rounded-xl border border-[var(--line)] bg-[var(--panel)] px-4 py-3 text-sm leading-relaxed text-[var(--ink)] shadow-[var(--shadow-2)] ${stage1 ? "" : "mt-4"}`}>
                   <p className="font-bold">{T.greetTitle}</p>
-                  <p key={tutorialActive ? tutorialIdx : langChosen ? "greet" : "lang"} className="motion-fade mt-1 text-[var(--muted)]">
-                    {tutorialActive
-                      ? 튜토리얼장(tutorialIdx).bubble
-                      : !langChosen
-                        ? "먼저 언어를 골라 주세요. Please choose your language first."
-                        : T.greetBody}
-                  </p>
+                  <Sentences
+                    key={tutorialActive ? tutorialIdx : langChosen ? "greet" : "lang"}
+                    className="motion-fade mt-1 text-[var(--muted)]"
+                    text={
+                      tutorialActive
+                        ? 튜토리얼장(tutorialIdx).bubble
+                        : !langChosen
+                          ? "먼저 언어를 골라 주세요. Please choose your language first."
+                          : T.greetBody
+                    }
+                  />
                 </div>
                 {/* 고른 언어 — 국기와 이름. 바꾸려면 페이전트 메뉴 ⑤ (사용법 화면의 [변경]은 2026-09-03 제거) */}
                 {langChosen && (
@@ -1236,7 +1299,7 @@ export default function Console() {
                  * 퀘스트는 콘솔 안의 동행 페이전트 말풍선이 이미 맡는다 — 입장 씬에서까지
                  * 행동 단추를 쌓으면 홈 단추의 서열이 흐려진다.
                  */}
-              </>
+              </div>
             )}
           </div>
 
@@ -1248,12 +1311,13 @@ export default function Console() {
            * 자동 번역이 건드리면 안 되는 영역이라 translate="no".
            */}
           {entranceGreeted && !langChosen && (
-            <section className="paygent-pop mt-6 w-full max-w-3xl" aria-label="언어 선택 / Select your language" translate="no">
+            <section className="paygent-pop mt-4 w-full max-w-4xl [@media(max-height:760px)]:mt-2" aria-label="언어 선택 / Select your language" translate="no">
               <p className="flex items-center justify-center gap-2 text-base font-bold">
                 <Icon name="translate" cls="h-5 w-5 text-[var(--accent)]" />
                 언어를 선택하세요 · Select your language
               </p>
-              <div className="mt-4 grid grid-cols-2 gap-2 min-[640px]:grid-cols-3 min-[900px]:grid-cols-4">
+              {/* 20개 언어 — 넓은 화면은 5열(4줄)로 한 줄을 아낀다 */}
+              <div className="mt-3 grid grid-cols-2 gap-2 min-[640px]:grid-cols-3 min-[900px]:grid-cols-4 min-[1024px]:grid-cols-5 [@media(max-height:760px)]:gap-1.5">
                 {UI_LANGS.map((l) => {
                   const on = l.code === uiLang;
                   return (
@@ -1263,7 +1327,7 @@ export default function Console() {
                       lang={l.code}
                       aria-pressed={on}
                       onClick={() => pickUiLang(l.code)}
-                      className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors motion-press ${
+                      className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors motion-press [@media(max-height:760px)]:py-1.5 ${
                         on
                           ? "border-[var(--accent)] bg-[var(--accent-tint)] ring-2 ring-[var(--accent-tint-line)]"
                           : "border-[var(--line)] bg-[var(--panel)] hover:border-[var(--accent)] hover:bg-[var(--accent-tint)]"
@@ -1283,20 +1347,13 @@ export default function Console() {
                 type="button"
                 lang={uiLang}
                 onClick={() => chooseLang(uiLang)}
-                className="paygent-pop mx-auto mt-5 flex w-full max-w-xs items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-bold text-white shadow-[var(--shadow-2)] hover:bg-[var(--accent-hover)] motion-press"
+                className="paygent-pop mx-auto mt-4 flex w-full max-w-xs items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-bold text-white shadow-[var(--shadow-2)] hover:bg-[var(--accent-hover)] motion-press [@media(max-height:760px)]:mt-3 [@media(max-height:760px)]:py-2.5"
               >
                 <Flag code={현재언어.flag} className="h-4 w-6" />
                 {현재언어.confirm}
                 <span aria-hidden>→</span>
               </button>
-              {/* 자동 번역 상태 — 엔진이 없으면 그렇다고 말한다. "번역 중"인 척하지 않는다 */}
-              <p className="mt-3 text-center text-2xs text-[var(--muted-soft)]" role="status">
-                {trStatus.error
-                  ? `자동 번역 오류: ${trStatus.error}`
-                  : 엔진표시
-                    ? `한국어 외 언어는 자동 번역돼요 · ${엔진표시}`
-                    : "자동 번역 엔진이 연결되지 않아 한국어 외 언어는 첫 화면만 번역됩니다"}
-              </p>
+              {/* 단추 아래 자동 번역 상태 문구는 2026-09-05 제거 — 엔진 상태는 페이전트 메뉴 ⑤ 아래에 남아 있다 */}
             </section>
           )}
 
@@ -1321,7 +1378,16 @@ export default function Console() {
       <div className="flex h-screen overflow-hidden">
         {nav}
         <main key={view} className="min-w-0 flex-1 overflow-y-auto motion-fade">
-          {view === "user" && <UserView initialToday={today} autoRunKey={userAutoRunKey} onDeadlineViewed={() => setDeadlineViewed(true)} onActionsViewed={() => setActionsViewed(true)} />}
+          {view === "user" && (
+            <UserView
+              initialToday={today}
+              autoRunKey={userAutoRunKey}
+              onDeadlineViewed={() => setDeadlineViewed(true)}
+              onActionsViewed={() => setActionsViewed(true)}
+              onSubmit={submitUserCase}
+              onOpenMonitor={() => setView("monitor")}
+            />
+          )}
           {view === "agent-run" && (
             <AgentRunView
               loop={wrappedAgentLoop}
@@ -1394,15 +1460,14 @@ export default function Console() {
 
       {(!narrow || queueOpen) && (
         <CaseQueue
-          cases={cases}
-          selectedId={caseId}
+          cases={queueCases}
+          selectedId={casePicked ? caseId : ""}
           onSelect={(id) => {
             selectCase(id);
             setQueueOpen(false);
           }}
           onRun={run}
           onAgentRun={() => setView("agent-run")}
-          ran={ran}
           overlay={narrow}
           onClose={() => setQueueOpen(false)}
           collapsed={queueCollapsed}
@@ -1425,8 +1490,14 @@ export default function Console() {
               </button>
             )}
             <span className="hidden min-[1024px]:inline">선택 상담</span>
-            <span className="font-mono text-[var(--ink)]">{c.id}</span>
-            <Pill tone={badgeTone(c.badge)}>{c.badge}</Pill>
+            {casePicked ? (
+              <>
+                <span className="font-mono text-[var(--ink)]">{c.id}</span>
+                <Pill tone={badgeTone(c.badge)}>{c.badge}</Pill>
+              </>
+            ) : (
+              <span className="text-[var(--muted-soft)]">없음</span>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <Pill tone={ran ? "ok" : "muted"}>
@@ -1440,6 +1511,28 @@ export default function Console() {
           </div>
         </div>
 
+        {/* 아직 고른 상담이 없다 — 판정할 대상이 없으니 탭도 본문도 열지 않는다 */}
+        {!casePicked && (
+          <div className="flex flex-1 items-center justify-center px-6">
+            <div className="max-w-md rounded-xl border border-dashed border-[var(--line)] px-6 py-8 text-center">
+              <Icon name="queue" cls="mx-auto h-6 w-6 text-[var(--muted-soft)]" />
+              <p className="mt-3 text-base font-bold">판정할 상담이 아직 없습니다</p>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
+                <span className="block">[내 급여 확인하기]에서 상황을 입력하고 [받을 돈 확인하기]를 누르면</span>
+                <span className="block">그 내용이 왼쪽 상담 큐로 옵니다.</span>
+                <span className="block">그다음 [판정 실행하기] 또는 [에이전트 실행]을 누르세요.</span>
+              </p>
+              <button
+                onClick={() => setView("user")}
+                className="motion-press mt-4 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-bold text-white hover:bg-[var(--accent-hover)]"
+              >
+                내 급여 확인하기로 이동 →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {casePicked && (
         <div className="border-b border-[var(--line)] px-4 pb-4 pt-5 min-[1024px]:px-8">
           <h1 className="text-2xl font-bold tracking-tight">{c.utterance}</h1>
           <p className="mt-1.5 max-w-3xl text-sm leading-relaxed text-[var(--muted)]">
@@ -1460,7 +1553,9 @@ export default function Console() {
             />
           </div>
         </div>
+        )}
 
+        {casePicked && (
         <div key={tab} className="flex-1 overflow-y-auto px-4 py-6 min-[1024px]:px-8 motion-fade">
           {tab === "findings" && (
             <FindingsTab
@@ -1518,6 +1613,7 @@ export default function Console() {
               </p>
             ))}
         </div>
+        )}
       </main>
 
       {/*
@@ -1546,7 +1642,8 @@ export default function Console() {
           className="absolute inset-0 z-10 bg-[var(--ink)]/20"
         />
       )}
-      {propsOpen && (
+      {/* 고른 상담이 없으면 속성 패널도 닫는다 — 픽스처의 라우팅 점수가 빈 화면 옆에 떠 있으면 거짓말이다 */}
+      {propsOpen && casePicked && (
         <aside className="absolute inset-y-0 right-0 z-20 w-[320px] max-w-[88vw] shrink-0 overflow-y-auto border-l border-[var(--line)] bg-[var(--panel)] px-5 py-4 shadow-[var(--shadow-2)] min-[1288px]:static min-[1288px]:z-auto min-[1288px]:shadow-none">
           <div className="flex items-center justify-between">
             <Eyebrow>PROPERTIES</Eyebrow>

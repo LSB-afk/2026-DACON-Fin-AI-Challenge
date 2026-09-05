@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { judgeDeparture, type Visa } from "@/lib/rules/departure";
+import { judgeDeparture, type DepartureInput, type Visa } from "@/lib/rules/departure";
 import { moneyTotals, type Finding } from "@/lib/rules/types";
 import { narrate, type Answer } from "@/lib/narrate";
 import { departureHarness } from "@/lib/harness/registry";
@@ -44,7 +44,17 @@ const 걸음 = ({ n, title, desc }: { n: number; title: string; desc?: string })
   </div>
 );
 
-export function UserView({ initialToday, onDeadlineViewed, onActionsViewed, autoRunKey = 0 }: { initialToday: string; onDeadlineViewed?: () => void; onActionsViewed?: () => void; /** 페이전트 원터치 — 키가 오르면 판정을 실행해 ④~⑤ 걸음이 보이게 한다 */ autoRunKey?: number }) {
+export function UserView({ initialToday, onDeadlineViewed, onActionsViewed, autoRunKey = 0, onSubmit, onOpenMonitor }: {
+  initialToday: string;
+  onDeadlineViewed?: () => void;
+  onActionsViewed?: () => void;
+  /** 페이전트 원터치 — 키가 오르면 판정을 실행해 ④~⑤ 걸음이 보이게 한다 */
+  autoRunKey?: number;
+  /** [받을 돈 확인하기]를 누른 입력 — 판정 결과 보기의 상담 큐로 그대로 넘어간다 (2026-09-05) */
+  onSubmit?: (input: Omit<DepartureInput, "today">) => void;
+  /** 넘어간 케이스를 보러 가는 문 */
+  onOpenMonitor?: () => void;
+}) {
   const [nationality, setNationality] = useState("베트남");
   const [visa, setVisa] = useState<Visa>("E-9");
   const [hireDate, setHireDate] = useState("2023-10-15");
@@ -62,6 +72,15 @@ export function UserView({ initialToday, onDeadlineViewed, onActionsViewed, auto
     setPrevAutoRun(autoRunKey);
     if (autoRunKey > 0) setRan(true);
   }
+  /* 대행 실행도 손으로 누른 것과 같이 입력을 상담 큐로 넘긴다 (부모 상태 갱신은 렌더 밖에서).
+     키 하나에 한 번만 — 입력값이 바뀌어도 같은 키로는 다시 넘기지 않는다 */
+  const submittedKeyRef = useRef(0);
+  useEffect(() => {
+    if (autoRunKey > 0 && submittedKeyRef.current !== autoRunKey) {
+      submittedKeyRef.current = autoRunKey;
+      onSubmit?.({ nationality, visa, hireDate, departureDate, monthlyWage: wage });
+    }
+  }, [autoRunKey, onSubmit, nationality, visa, hireDate, departureDate, wage]);
 
   const findings: Finding[] = useMemo(
     () =>
@@ -155,11 +174,25 @@ export function UserView({ initialToday, onDeadlineViewed, onActionsViewed, auto
       {/* ② 확인 → 실행 */}
       <걸음 n={2} title="확인하기" desc="버튼을 누르면 바로 계산합니다. 같은 내용을 넣으면 언제 눌러도 같은 결과가 나옵니다." />
       <button
-        onClick={() => setRan(true)}
+        onClick={() => {
+          setRan(true);
+          onSubmit?.({ nationality, visa, hireDate, departureDate, monthlyWage: wage });
+        }}
         className="motion-press mt-3 w-full rounded-xl bg-[var(--accent)] py-3.5 text-base font-bold text-white hover:bg-[var(--accent-hover)]"
       >
         받을 돈 확인하기
       </button>
+      {/* 같은 입력이 판정 결과 보기의 상담 큐에 담겼다 — 거기서 판정 실행·에이전트 실행을 누른다 */}
+      {ran && onSubmit && (
+        <p className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--accent-tint-line)] bg-[var(--accent-tint)] px-3 py-2 text-xs text-[var(--accent-ink)]">
+          <span>입력한 내용이 [판정 결과 보기]의 상담 큐에 담겼습니다.</span>
+          {onOpenMonitor && (
+            <button type="button" onClick={onOpenMonitor} className="font-bold underline underline-offset-2 hover:text-[var(--accent)]">
+              판정 결과 보기로 이동 →
+            </button>
+          )}
+        </p>
+      )}
       {ran && guard.length > 0 && (
         <p className="mt-2 rounded-md border border-[var(--warning)] bg-[var(--warning-soft)] px-3 py-2 text-xs text-[var(--warning-ink)]">
           결과를 보여 드리기 전 검사에서 문제가 발견되어 결과를 표시하지 않았습니다. 고용노동부 상담 창구에 문의해 주세요.

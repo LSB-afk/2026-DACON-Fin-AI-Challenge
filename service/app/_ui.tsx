@@ -694,7 +694,6 @@ export function CaseQueue({
   onSelect,
   onRun,
   onAgentRun,
-  ran,
   overlay,
   onClose,
   collapsed,
@@ -705,7 +704,6 @@ export function CaseQueue({
   onSelect: (id: string) => void;
   onRun: () => void;
   onAgentRun: () => void;
-  ran: boolean;
   /** 좁은 화면에서 열이 아니라 겹쳐 뜬다 — 폭을 깎으면 카드가 한 글자씩 줄바꿈된다 */
   overlay?: boolean;
   onClose?: () => void;
@@ -757,7 +755,11 @@ export function CaseQueue({
             <Pill>{cases.length}</Pill>
           </div>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            합성 픽스처 · 실제 개인정보 없음
+            {cases.length === 0
+              ? "아직 담긴 상담이 없습니다"
+              : cases.every((c) => c.source === "user")
+                ? "내가 입력한 내용 · 서버에 저장하지 않음"
+                : "합성 픽스처 · 실제 개인정보 없음"}
           </p>
         </div>
         {overlay ? (
@@ -798,6 +800,20 @@ export function CaseQueue({
        * 새로 정의한다 — 그러면 같은 면이 화면마다 두 색으로 갈린다.
        */}
       <div className="flex-1 space-y-2 overflow-y-auto px-3 py-3">
+        {/*
+         * 빈 큐 (2026-09-05) — 픽스처 6건을 미리 채워 두지 않는다. 사용자가
+         * 내 급여 확인하기에서 [받을 돈 확인하기]를 누르면 그 입력이 여기로 온다.
+         * 픽스처는 운영·관리 → 상담 사례 목록에 그대로 있다.
+         */}
+        {cases.length === 0 && (
+          <div className="rounded-[var(--radius-m)] border border-dashed border-[var(--line)] px-4 py-5 text-center text-xs leading-relaxed text-[var(--muted)]">
+            <p className="font-bold text-[var(--ink)]">상담 큐가 비어 있습니다</p>
+            <p className="mt-1.5">
+              <span className="block">왼쪽 메뉴의 [내 급여 확인하기]에서 상황을 입력하고</span>
+              <span className="block">[받을 돈 확인하기]를 누르면 그 내용이 여기로 옵니다.</span>
+            </p>
+          </div>
+        )}
         {cases.map((c) => {
           const on = c.id === selectedId;
           return (
@@ -847,10 +863,7 @@ export function CaseQueue({
         >
           <Icon name="agent" /> 에이전트 실행
         </button>
-        <p className="mt-2 text-center text-xs text-[var(--muted)]">
-          {ran ? "실행 완료 · 입력을 바꾸면 즉시 다시 계산됩니다" : "대기 중"}
-        </p>
-        <p className="mt-1 text-center text-2xs text-[var(--muted-soft)]">금액과 날짜를 정하는 판정은 코드가 하고, 말을 알아듣는 일만 AI가 합니다</p>
+        {/* 단추 아래 안내문("대기 중 · 판정은 코드가…")은 2026-09-05 제거 — 상태는 상단 필이 이미 말한다 */}
       </div>
 
       <p className="border-t border-[var(--line)] px-5 py-3 text-2xs text-[var(--muted-soft)]">

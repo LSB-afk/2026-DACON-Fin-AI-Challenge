@@ -26,6 +26,8 @@ export type Case = {
   payslipSampleId?: string;
   workplaceSize?: WorkplaceSize;
   departure?: Omit<DepartureInput, "today">;
+  /** "user" — 내 급여 확인하기에서 사용자가 직접 입력해 만든 케이스 (픽스처가 아니다) */
+  source?: "user";
 };
 
 export const cases: Case[] = [

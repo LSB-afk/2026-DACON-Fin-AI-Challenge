@@ -434,6 +434,20 @@ table thead th {
 }
 .paygent-dash-enter { animation: motion-fade-in var(--dur-base) var(--ease) 260ms both; }
 
+/*
+ * 입장 씬 1막 (2026-09-05) — 캐릭터를 누르면 인사 말풍선이 캐릭터 **오른쪽**에 붙는다.
+ * 말풍선을 아래에 쌓으면 언어 선택판까지 합쳐 첫 화면에 스크롤바가 생겼다.
+ * 캐릭터는 가운데서 왼쪽으로 "살짝" 걸어간다 — 행 안에서 제자리(0)로 돌아오는
+ * 애니메이션이라 시작 오프셋은 말풍선 폭의 절반 정도면 충분하다.
+ */
+@keyframes paygent-nudge-left-anim {
+  from { transform: translateX(160px); }
+  to { transform: translateX(0); }
+}
+@media (min-width: 640px) {
+  .paygent-nudge-left { animation: paygent-nudge-left-anim 420ms var(--ease) both; }
+}
+
 /* 말풍선 팝 */
 @keyframes paygent-pop {
   from { transform: scale(0.96) translateY(4px); opacity: 0; }
