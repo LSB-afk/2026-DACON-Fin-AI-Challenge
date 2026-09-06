@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   probe:
-    # No URL has been deployed yet: skip scheduled jobs, never claim healthy.
+    # Without a public URL, skip scheduled jobs, never claim healthy.
     # A manual run with missing configuration deliberately fails.
     if: ${{ vars.RENDER_SERVICE_URL != '' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
@@ -23,15 +23,19 @@ jobs:
     env:
       RENDER_SERVICE_URL: ${{ vars.RENDER_SERVICE_URL }}
       EXPECTED_DEPLOY_SHA: ${{ vars.RENDER_EXPECTED_COMMIT }}
+      RELEASE_MODE: ${{ vars.RENDER_RELEASE_MODE || 'pinned' }}
       EVENT_NAME: ${{ github.event_name }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          # Only the trusted deployment branch can supply rolling release history.
+          ref: main
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "24.11.1"
-      - name: Require a public Render origin and frozen release SHA
+      - name: Require a public Render origin and explicit release policy
         run: |
           node --input-type=module -e '
             const raw = process.env.RENDER_SERVICE_URL;
@@ -41,19 +45,33 @@ jobs:
               console.error("Set RENDER_SERVICE_URL to the deployed https://SERVICE.onrender.com origin (no credentials or path).");
               process.exit(2);
             }
-            if (!/^[a-f0-9]{40}$/.test(process.env.EXPECTED_DEPLOY_SHA ?? "")) {
+            if (!["pinned", "rolling"].includes(process.env.RELEASE_MODE)) {
+              console.error("RENDER_RELEASE_MODE must be pinned or rolling.");
+              process.exit(2);
+            }
+            if (process.env.RELEASE_MODE === "pinned" && !/^[a-f0-9]{40}$/.test(process.env.EXPECTED_DEPLOY_SHA ?? "")) {
               console.error("Set RENDER_EXPECTED_COMMIT to the verified deployment full commit SHA.");
               process.exit(2);
             }
           '
       - name: Check liveness, release, homepage and AI configuration without inference
         run: |
-          if [ "$EVENT_NAME" = "schedule" ]; then
-            node service/scripts/smoke.mjs "$RENDER_SERVICE_URL" --scheduled
-          else
-            node service/scripts/smoke.mjs "$RENDER_SERVICE_URL"
+          options=()
+          if [ "$RELEASE_MODE" = "rolling" ]; then
+            # Accept the healthy serving ancestor while the new build is pending.
+            # This does not assert that the latest commit is already deployed.
+            ALLOWED_DEPLOY_SHAS="$(git rev-list HEAD | paste -sd, -)"
+            export ALLOWED_DEPLOY_SHAS
+            options+=(--rolling-release)
           fi
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            options+=(--scheduled)
+          fi
+          node service/scripts/smoke.mjs "$RENDER_SERVICE_URL" "${options[@]}"
       - name: Record the limits of this check
         if: always()
         run: |
           echo 'This run is a point-in-time check, not an uptime guarantee. AI configuration is checked without validating API credit or running inference. Failed runs require operator attention; scheduled runs themselves can be delayed or dropped.' >> "$GITHUB_STEP_SUMMARY"
+          if [ "$RELEASE_MODE" = "rolling" ]; then
+            echo 'Rolling mode checks that the serving revision belongs to main history, not that the newest commit has finished deploying. Check Render Events and compare /api/health with the intended commit after each rollout.' >> "$GITHUB_STEP_SUMMARY"
+          fi

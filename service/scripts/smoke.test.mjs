@@ -55,7 +55,7 @@ function cli(args, env = {}, now, advanceAfterResponse) {
   `] : [SCRIPT, ...args];
   return new Promise((resolve) => {
     execFile(process.execPath, command, {
-      env: { ...process.env, EXPECTED_DEPLOY_SHA: "", ...env }, timeout: 35_000,
+      env: { ...process.env, EXPECTED_DEPLOY_SHA: "", ALLOWED_DEPLOY_SHAS: "", ...env }, timeout: 35_000,
     }, (error, stdout, stderr) => resolve({ code: error?.code ?? 0, stdout, stderr }));
   });
 }
@@ -119,6 +119,69 @@ test("unknown revision is only allowed when no release is expected", async (t) =
   const server = await fixture(t, { "/api/health": health({ revision: null }) });
   assert.equal((await checkDeployment(server.base)).ok, true);
   assert.equal((await checkDeployment(server.base, { expectedCommit: SHA })).ok, false);
+});
+
+test("rolling release accepts both the serving ancestor and the newly deployed main revision", async (t) => {
+  const latest = "a".repeat(40);
+  const allowedCommits = [latest, SHA];
+  for (const revision of [SHA, latest]) {
+    const server = await fixture(t, { "/api/health": health({ revision }) });
+    const result = await checkDeployment(server.base, { allowedCommits });
+    assert.equal(result.ok, true);
+    assert.equal(result.revision, revision);
+    assert.equal(server.requests.length, 3);
+  }
+});
+
+test("rolling release rejects revisions outside main history, including unknown revisions", async (t) => {
+  for (const revision of ["b".repeat(40), null, "short", undefined]) {
+    const server = await fixture(t, { "/api/health": health({ revision }) });
+    const result = await checkDeployment(server.base, { allowedCommits: [SHA] });
+    assert.equal(result.ok, false);
+    assert.match(result.failures.join("\n"), /revision/);
+  }
+});
+
+test("rolling release requires a nonempty full-SHA allowlist and cannot also pin a commit", async (t) => {
+  const server = await fixture(t);
+  for (const allowedCommits of [[], null, SHA, [""], ["short-SECRET"], [null], [SHA, "invalid"]]) {
+    const result = await checkDeployment(server.base, { allowedCommits });
+    assert.equal(result.ok, false);
+    assert.match(result.failures.join("\n"), /configuration/);
+    assert.equal(JSON.stringify(result).includes("SECRET"), false);
+  }
+  assert.equal((await checkDeployment(server.base, { expectedCommit: SHA, allowedCommits: [SHA] })).ok, false);
+  assert.deepEqual(server.requests, []);
+});
+
+test("rolling CLI explicitly uses main history instead of the saved frozen-release pin", async (t) => {
+  const server = await fixture(t);
+  const result = await cli([server.base, "--rolling-release"], {
+    EXPECTED_DEPLOY_SHA: "a".repeat(40), ALLOWED_DEPLOY_SHAS: `${"b".repeat(40)},${SHA}`,
+  });
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /PASS/);
+  assert.match(result.stdout, /rolling/);
+  assert.match(result.stdout, /freshness/i);
+  assert.equal(server.requests.length, 3);
+});
+
+test("rolling CLI rejects missing or malformed history before requesting the service", async (t) => {
+  const server = await fixture(t);
+  for (const ALLOWED_DEPLOY_SHAS of ["", "short-SECRET", `${SHA},`, `${SHA},invalid`]) {
+    const result = await cli([server.base, "--rolling-release"], { ALLOWED_DEPLOY_SHAS });
+    assert.equal(result.code, 2);
+    assert.equal((result.stdout + result.stderr).includes("SECRET"), false);
+  }
+  assert.equal((await cli([server.base, "--rolling-release", "--rolling-release"], { ALLOWED_DEPLOY_SHAS: SHA })).code, 2);
+  assert.deepEqual(server.requests, []);
+});
+
+test("saved rolling history never weakens pinned checks without the explicit CLI option", async (t) => {
+  const server = await fixture(t);
+  const result = await cli([server.base], { EXPECTED_DEPLOY_SHA: "b".repeat(40), ALLOWED_DEPLOY_SHAS: SHA });
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /expected commit/);
 });
 
 for (const cacheControl of [null, "public, max-age=60"]) {

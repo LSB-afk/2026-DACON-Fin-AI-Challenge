@@ -11,7 +11,8 @@ services:
     buildCommand: npm ci && npm run build
     startCommand: npm run start -- --hostname 0.0.0.0 --port "$PORT"
     healthCheckPath: /api/health
-    autoDeployTrigger: "off"
+    # Pushes affecting this service deploy only after detected CI checks pass.
+    autoDeployTrigger: checksPass
     envVars:
       - key: NODE_VERSION
         value: 24.11.1

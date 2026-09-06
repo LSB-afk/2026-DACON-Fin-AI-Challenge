@@ -60,7 +60,7 @@ function parseObject(text) {
 }
 
 /** A single bounded probe; retries and logging belong only to the CLI. */
-export async function checkDeployment(base, { expectedCommit, requireAi = true, timeoutMs = 15_000 } = {}) {
+export async function checkDeployment(base, { expectedCommit, allowedCommits, requireAi = true, timeoutMs = 15_000 } = {}) {
   const started = performance.now();
   const failures = [];
   let revision = null;
@@ -69,6 +69,8 @@ export async function checkDeployment(base, { expectedCommit, requireAi = true, 
   const target = deploymentOrigin(base);
   if (!target) failures.push("configuration: URL must be an HTTPS root origin or local loopback HTTP origin, without credentials, query or fragment");
   if (expectedCommit !== undefined && (typeof expectedCommit !== "string" || !FULL_SHA.test(expectedCommit))) failures.push("configuration: expected commit must be a full 40-character SHA");
+  if (allowedCommits !== undefined && (!Array.isArray(allowedCommits) || allowedCommits.length === 0 || !allowedCommits.every((sha) => typeof sha === "string" && FULL_SHA.test(sha)))) failures.push("configuration: allowed commits must be a nonempty list of full 40-character SHAs");
+  if (allowedCommits !== undefined && expectedCommit !== undefined) failures.push("configuration: choose rolling history or an exact commit, not both");
   if (typeof requireAi !== "boolean") failures.push("configuration: requireAi must be a boolean");
   if (requireAi === false && !target?.local) failures.push("configuration: unconfigured AI is allowed only for explicit local checks");
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2_147_483_647) failures.push("configuration: timeout must be a positive supported integer in milliseconds");
@@ -87,6 +89,7 @@ export async function checkDeployment(base, { expectedCommit, requireAi = true, 
     if (value?.revision !== null && (typeof value?.revision !== "string" || !FULL_SHA.test(value.revision))) failures.push("GET /api/health: revision must be a full SHA or null");
     else revision = value.revision?.toLowerCase() ?? null;
     if (expectedCommit !== undefined && revision !== expectedCommit.toLowerCase()) failures.push("GET /api/health: deployed revision does not match expected commit");
+    if (allowedCommits !== undefined && !allowedCommits.some((sha) => sha.toLowerCase() === revision)) failures.push("GET /api/health: deployed revision is not in the allowed main history");
     const timestamp = typeof value?.checkedAt === "string" && ISO_TIMESTAMP.test(value.checkedAt) ? Date.parse(value.checkedAt) : NaN;
     if (!Number.isFinite(timestamp)) failures.push("GET /api/health: checkedAt must be an ISO timestamp");
     else {
@@ -115,7 +118,7 @@ async function main(args) {
   const options = new Set();
   let base;
   for (const arg of args) {
-    if (arg === "--scheduled" || arg === "--allow-unconfigured-ai") {
+    if (arg === "--scheduled" || arg === "--allow-unconfigured-ai" || arg === "--rolling-release") {
       if (options.has(arg)) { console.error("configuration: duplicate option"); return 2; }
       options.add(arg);
     } else if (arg.startsWith("--") || base !== undefined) {
@@ -127,14 +130,20 @@ async function main(args) {
     console.log("SKIPPED: outside the 2026-09-06 through 2026-09-12 Asia/Seoul monitoring window");
     return 0;
   }
-  if (!base) { console.error("configuration: usage: node scripts/smoke.mjs <URL> [--scheduled] [--allow-unconfigured-ai]"); return 2; }
+  if (!base) { console.error("configuration: usage: node scripts/smoke.mjs <URL> [--scheduled] [--allow-unconfigured-ai] [--rolling-release]"); return 2; }
   const requireAi = !options.has("--allow-unconfigured-ai");
+  // Explicit rolling mode keeps the frozen pin available for a later manual freeze.
+  // The caller supplies trusted main history; a healthy ancestor is valid during builds.
+  const rolling = options.has("--rolling-release");
+  const release = rolling
+    ? { allowedCommits: (process.env.ALLOWED_DEPLOY_SHAS || "").split(",") }
+    : { expectedCommit: process.env.EXPECTED_DEPLOY_SHA || undefined };
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     if (options.has("--scheduled") && !withinMonitoringWindow()) {
       console.log("SKIPPED: monitoring window ended before the next attempt; no further checks were sent");
       return 0;
     }
-    const result = await checkDeployment(base, { expectedCommit: process.env.EXPECTED_DEPLOY_SHA || undefined, requireAi });
+    const result = await checkDeployment(base, { ...release, requireAi });
     if (result.failures.some((failure) => failure.startsWith("configuration:"))) {
       for (const failure of result.failures) console.error(failure);
       return 2;
@@ -142,6 +151,7 @@ async function main(args) {
     if (result.ok) {
       if (attempt > 1) console.warn(`WARNING: deployment recovered after ${attempt - 1} failed probe(s)`);
       if (!requireAi) console.log("WARNING: local check explicitly allows unconfigured AI");
+      if (rolling) console.log("NOTE: rolling check accepts main history during builds; deployment freshness is not verified");
       console.log(`PASS: ${result.checkedAt} revision=${result.revision ?? "unknown"} provider=${result.provider ?? "not-configured"} duration=${result.durationMs}ms`);
       return 0;
     }
