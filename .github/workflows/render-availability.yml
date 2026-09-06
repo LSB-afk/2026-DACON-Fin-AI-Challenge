@@ -2,9 +2,15 @@ name: Render availability
 
 on:
   workflow_dispatch:
+    inputs:
+      recovery_drill:
+        description: "Fail this healthy monitor run to verify automatic recovery wiring"
+        required: false
+        type: boolean
+        default: false
   schedule:
     # UTC; the checker enforces the exact 2026 KST window and buffer.
-    - cron: "3-58/5 * 5-12 9 *"
+    - cron: "4-59/5 * 5-12 9 *"
 
 permissions:
   contents: read
@@ -68,10 +74,20 @@ jobs:
             options+=(--scheduled)
           fi
           node service/scripts/smoke.mjs "$RENDER_SERVICE_URL" "${options[@]}"
+      - name: Trigger the requested recovery wiring drill
+        id: recovery_drill
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.recovery_drill == true }}
+        run: |
+          echo 'Synthetic monitoring recovery drill; the service was checked successfully and was not modified.' >&2
+          exit 1
       - name: Record the limits of this check
         if: always()
         run: |
-          echo 'This run is a point-in-time check, not an uptime guarantee. AI configuration is checked without validating API credit or running inference. Failed runs require operator attention; scheduled runs themselves can be delayed or dropped.' >> "$GITHUB_STEP_SUMMARY"
+          if [ '${{ steps.recovery_drill.outcome }}' = 'failure' ]; then
+            echo 'This failed run is an intentional recovery-wiring drill after a successful service check; it is not evidence of application downtime and did not modify the service.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'This run is a point-in-time check, not an uptime guarantee. AI configuration is checked without validating API credit or running inference. Failed runs require operator attention; scheduled runs themselves can be delayed or dropped.' >> "$GITHUB_STEP_SUMMARY"
+          fi
           if [ "$RELEASE_MODE" = "rolling" ]; then
             echo 'Rolling mode checks that the serving revision belongs to main history, not that the newest commit has finished deploying. Check Render Events and compare /api/health with the intended commit after each rollout.' >> "$GITHUB_STEP_SUMMARY"
           fi
