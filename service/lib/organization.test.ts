@@ -11,7 +11,7 @@ import { samples } from "./samples.ts";
 import { buildRunABox, validateABox } from "./ontology/abox.ts";
 import { buildLiveOntology, type LiveOntologyInput, type LiveOntologySnapshot } from "./ontology/live.ts";
 import type { AgentResponse } from "./agentExecution.ts";
-import { ORGANIZATION_CAPABILITIES, ORGANIZATION_DEPARTMENTS, capabilityState, summarizeOrgStates } from "./organization.ts";
+import { ORGANIZATION_CAPABILITIES, ORGANIZATION_DEPARTMENTS, ORGANIZATION_PROCESS_EDGES, ORGANIZATION_PROCESS_STAGES, capabilityState, summarizeOrgStates } from "./organization.ts";
 
 const utterance = "베트남 E-9 근로자입니다. 2023-09-01 입사, 2026-10-15 출국, 월급 215만원입니다.";
 const fields = { nationality: "베트남", visa: "E-9", hireDate: "2023-09-01", departureDate: "2026-10-15", monthlyWage: 2_150_000 };
@@ -90,6 +90,33 @@ test("capability details follow real flow and skill registries so navigation and
     assert.equal(capability.actor, "코드");
     assert.equal(capability.serviceId, `service:skill:${skill.id}`);
   }
+});
+
+test("organization process projects the observed execution order, concurrent requests, and named outputs", () => {
+  const stages = new Map(ORGANIZATION_PROCESS_STAGES.map((stage) => [stage.id, stage]));
+  assert.deepEqual(ORGANIZATION_PROCESS_STAGES.map((stage) => stage.id), ["input", "agent-requests", "judge", "verification", "answer", "endpoint"]);
+  assert.deepEqual(stages.get("agent-requests")?.capabilityIds, ["routing", "extract"]);
+  assert.equal(stages.get("agent-requests")?.kind, "parallel");
+  assert.deepEqual(stages.get("verification")?.capabilityIds, ["guard", "ontology"]);
+  assert.deepEqual(stages.get("answer")?.branchCapabilityIds, ["translate"]);
+  assert.deepEqual(stages.get("endpoint")?.capabilityIds, ["approval", "application", "record"]);
+
+  assert.deepEqual(ORGANIZATION_PROCESS_EDGES, [
+    { from: "input", to: "routing", kind: "required" },
+    { from: "input", to: "extract", kind: "required" },
+    { from: "routing", to: "judge", kind: "required" },
+    { from: "extract", to: "judge", kind: "required" },
+    { from: "judge", to: "guard", kind: "required" },
+    { from: "guard", to: "ontology", kind: "required" },
+    { from: "ontology", to: "narrate", kind: "required" },
+    { from: "narrate", to: "translate", kind: "optional" },
+    { from: "narrate", to: "approval", kind: "required" },
+    { from: "approval", to: "application", kind: "required" },
+    { from: "application", to: "record", kind: "required" },
+  ]);
+
+  assert.equal(stages.get("judge")?.output, card("judge").output[0]);
+  assert.equal(stages.get("endpoint")?.output, card("record").output[0]);
 });
 
 test("every capability provides input, output, constraints and a resolvable implementation reference", () => {

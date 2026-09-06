@@ -22,6 +22,7 @@ import { routeByKeyword, needsClarification, getSkill, type SkillId } from "@/li
 import { judgePayslip, type Payslip, type WorkplaceSize } from "@/lib/rules/payslip";
 import { judgeDeparture, type DepartureInput, type Visa } from "@/lib/rules/departure";
 import { moneyTotals, type Finding } from "@/lib/rules/types";
+import { buildReceipt } from "@/lib/receipt";
 import { samples } from "@/lib/samples";
 import { verifyCounts } from "@/lib/standards";
 import {
@@ -666,7 +667,30 @@ export default function Console() {
     return s;
   })();
 
-  const totals = moneyTotals(findings);
+  const currentInputDescription = useMemo(() => {
+    if (skillId === "departure") {
+      return `국적 ${nationality} · 체류자격 ${visa} · 입사일 ${hireDate} · 출국(예정)일 ${departureDate} · 월 평균임금 ${wage.toLocaleString("ko-KR")}원`;
+    }
+    if (skillId === "payslip") {
+      const items = (rows: Payslip["earnings"], label: string) =>
+        `${label} ${rows.map((row) => `${row.label} ${row.amount.toLocaleString("ko-KR")}원`).join(", ") || "입력 없음"}`;
+      return `${items(payslipDraft.earnings, "지급")} · ${items(payslipDraft.deductions, "공제")} · 상시 근로자 수 ${size}`;
+    }
+    return monitorUtterance;
+  }, [skillId, nationality, visa, hireDate, departureDate, wage, payslipDraft, size, monitorUtterance]);
+  const receipt = useMemo(
+    () => buildReceipt({
+      ran,
+      findings,
+      source: {
+        caseId: c.id,
+        ...(abox?.graph.runId ? { runId: abox.graph.runId } : {}),
+        today,
+        description: currentInputDescription,
+      },
+    }),
+    [ran, findings, c.id, abox, today, currentInputDescription],
+  );
   const vc = verifyCounts();
 
   function run(preserveTranslation = false) {
@@ -1516,7 +1540,7 @@ export default function Console() {
             />
           )}
           {view === "artifacts" && (
-            <ArtifactsView runs={ledger} latestJson={latestJson} />
+            <ArtifactsView runs={ledger} latestJson={latestJson} receipt={receipt} />
           )}
           {view === "standards-map" && <StandardsMapView />}
           {view === "golden" && <GoldenView />}
@@ -1660,7 +1684,7 @@ export default function Console() {
         <div className="border-b border-[var(--line)] px-4 pb-4 pt-5 min-[1024px]:px-8">
           <h1 className="text-2xl font-bold tracking-tight">{monitorUtterance}</h1>
           <p className="mt-1.5 max-w-3xl text-sm leading-relaxed text-[var(--muted)]">
-            {c.summary}
+            {currentInputDescription}
           </p>
           <div className="mt-4">
             <Tabs
@@ -1683,10 +1707,8 @@ export default function Console() {
         <div key={tab} className="flex-1 overflow-y-auto px-4 py-6 min-[1024px]:px-8 motion-fade">
           {tab === "findings" && (
             <FindingsTab
-              findings={findings}
-              totals={totals}
+              receipt={receipt}
               skill={skill}
-              ran={ran}
               routed={!!skillId}
             />
           )}

@@ -1,16 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FLOW, type FlowTab, type FlowView } from "@/lib/flow";
+import { type FlowTab, type FlowView } from "@/lib/flow";
 import { getSkill, type SkillId } from "@/lib/skills";
 import { buildLiveOntology, type LiveOntologyInput } from "@/lib/ontology/live";
-import { ORGANIZATION_CAPABILITIES, ORGANIZATION_DEPARTMENTS, capabilityState, summarizeOrgStates, type OrgCapability, type OrgCapabilityState } from "@/lib/organization";
+import { ORGANIZATION_CAPABILITIES, ORGANIZATION_DEPARTMENTS, ORGANIZATION_PROCESS_EDGES, ORGANIZATION_PROCESS_STAGES, capabilityState, summarizeOrgStates, type OrgCapability, type OrgCapabilityState } from "@/lib/organization";
 import { Icon } from "./_ui";
 import styles from "./_organization.module.css";
 
 const ACTORS = [{ value: "all", label: "전체 역할" }, { value: "모델", label: "AI 모델" }, { value: "코드", label: "규칙 코드" }, { value: "사람", label: "사람" }];
 const ICONS: Record<string, string> = { input: "users", routing: "scenario", extract: "funnel", judge: "scale", payslip: "calc", departure: "plane", guard: "shield", ontology: "ontology", narrate: "speech", translate: "translate", record: "audit", approval: "users", application: "check" };
 const actorLabel = (actor: OrgCapability["actor"]) => actor === "모델" ? "AI 모델" : actor === "코드" ? "규칙 코드" : "사람";
+const primaryOutput = (capability: OrgCapability) => capability.output[capability.id === "application" ? 1 : 0];
 
 function StateBadge({ state }: { state: OrgCapabilityState }) {
   return <span className={styles.status} data-status={state.status}><span aria-hidden className={styles.statusDot} />{state.label}</span>;
@@ -27,7 +28,6 @@ export function OrgView({ live, availability, canApprove = false, onNavigate, on
   const snapshot = buildLiveOntology(live);
   const [selectedId, setSelectedId] = useState("payslip");
   const [detailOpen, setDetailOpen] = useState(false);
-  const [guideOpen, setGuideOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [actor, setActor] = useState("all");
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -54,46 +54,85 @@ export function OrgView({ live, availability, canApprove = false, onNavigate, on
     if (["approval", "application"].includes(selected.id)) onOpenConsult();
     else onNavigate(selected.target.view, selected.target.tab);
   }
-  function card(capability: OrgCapability, authority = false) {
+  function card(capability: OrgCapability) {
     const state = states.get(capability.id)!;
-    const skill = capability.skillId ? getSkill(capability.skillId) : null;
     return <div key={capability.id} data-testid="org-capability" data-status={state.status} data-actor={capability.actor}>
       <button type="button" data-testid={`org-card-${capability.id}`} data-status={state.status}
-        className={`${styles.card} ${authority ? styles.authority : ""} ${selectedId === capability.id ? styles.selected : ""}`}
+        className={`${styles.card} ${selectedId === capability.id ? styles.selected : ""}`}
         aria-haspopup="dialog" onClick={() => inspect(capability.id)}>
         <span className={styles.cardTop}>
-          <span className={styles.actor}><Icon name={ICONS[capability.id] ?? "org"} cls="h-3.5 w-3.5" />{authority ? capability.actor === "사람" ? "사람의 최종 확인" : "결과 전달·적용" : actorLabel(capability.actor)}</span>
+          <span className={styles.actor}><Icon name={ICONS[capability.id] ?? "org"} cls="h-3.5 w-3.5" />{actorLabel(capability.actor)}</span>
           <StateBadge state={state} />
         </span>
         <strong className={styles.cardTitle}>{capability.title}</strong>
         <span className={styles.cardDescription}>{capability.summary}</span>
-        {!authority && <span className={styles.cardMeta}>
-          {skill ? <><span>검사 규칙 {skill.ruleCatalog.length}개</span><span>필수 입력 {skill.requiredInputs.length}종</span></>
-            : <><span>입력 {capability.input.length}종</span><span>산출 {capability.output.length}종</span></>}
-          {state.ms !== undefined && <span>실측 {state.ms.toLocaleString("ko-KR")}ms</span>}
+        <span className={styles.cardMeta}>
+          <span className={styles.outputLabel}>만드는 결과</span><span className={styles.outputValue}>{primaryOutput(capability)}</span>
+          {state.ms !== undefined && <span className={styles.timing}>실측 {state.ms.toLocaleString("ko-KR")}ms</span>}
           <span className={styles.detailHint}>상세 보기 <span aria-hidden>↗</span></span>
-        </span>}
+        </span>
       </button>
     </div>;
+  }
+
+  function processCapability(id: string) {
+    const capability = ORGANIZATION_CAPABILITIES.find((item) => item.id === id);
+    if (!capability) return null;
+    const state = states.get(id)!;
+    return <button type="button" key={id} className={`${styles.processCapability} ${id === "judge" ? styles.processJudge : ""}`}
+      data-testid={`org-process-${id}`} aria-haspopup="dialog" onClick={() => inspect(id)}>
+      <span className={styles.processCapabilityTop}><span className={styles.actor}><Icon name={ICONS[id] ?? "org"} cls="h-3.5 w-3.5" />{actorLabel(capability.actor)}</span><StateBadge state={state} /></span>
+      <strong>{capability.title}</strong>
+    </button>;
+  }
+
+  function inlineProcessCapabilities(ids: readonly string[]) {
+    return ids.flatMap((id, index) => {
+      const nextId = ids[index + 1];
+      const linked = nextId !== undefined && ORGANIZATION_PROCESS_EDGES.some((edge) => edge.from === id && edge.to === nextId);
+      const next = nextId === undefined ? null : ORGANIZATION_CAPABILITIES.find((capability) => capability.id === nextId);
+      const current = ORGANIZATION_CAPABILITIES.find((capability) => capability.id === id);
+      return [processCapability(id), ...(linked && current && next ? [<span key={`${id}-${nextId}`} className={styles.inlineConnector} aria-label={`${current.title} 다음 ${next.title}`}>→</span>] : [])];
+    });
+  }
+
+  function nextLabel(index: number) {
+    const stage = ORGANIZATION_PROCESS_STAGES[index];
+    const nextStage = ORGANIZATION_PROCESS_STAGES[index + 1];
+    if (!nextStage) return null;
+    const nextIds = new Set(nextStage.capabilityIds);
+    const targets = [...new Set(ORGANIZATION_PROCESS_EDGES
+      .filter((edge) => stage.capabilityIds.includes(edge.from) && nextIds.has(edge.to))
+      .map((edge) => ORGANIZATION_CAPABILITIES.find((capability) => capability.id === edge.to)?.title)
+      .filter((title): title is string => title !== undefined))];
+    return targets.length ? targets.join(" · ") : nextStage.title;
   }
 
   return <section className={styles.workspace} data-testid="org-workspace" aria-label="AI 역할 조직도">
     <header className={styles.header}>
       <div><p className={styles.kicker}>페이체크 업무지원 조직</p><h1>AI 역할 조직도</h1>
-        <p className={styles.subtitle}>누가 분석하고, 무엇을 검증하고, 누가 승인하는지 한눈에 확인하세요.<br />{ORGANIZATION_DEPARTMENTS.length}개 부서 · {ORGANIZATION_CAPABILITIES.length}개 업무 기능 · {ORGANIZATION_CAPABILITIES.filter((item) => item.skillId).length}개 판정 스킬</p></div>
+        <p className={styles.subtitle}>실제 요청, 결정 코드, 사람의 승인까지 상담 결과가 만들어지고 적용되는 경로입니다.<br />{ORGANIZATION_DEPARTMENTS.length}개 부서 · {ORGANIZATION_CAPABILITIES.length}개 업무 기능 · {ORGANIZATION_CAPABILITIES.filter((item) => item.skillId).length}개 등록 판정 스킬</p></div>
       <div className={styles.headerActions}>
-        <button type="button" className={styles.control} aria-expanded={guideOpen} aria-controls="org-flow-guide" onClick={() => setGuideOpen((value) => !value)}><Icon name="flow" />흐름 안내</button>
         <button type="button" className={styles.control} onClick={() => onNavigate("skills")}>스킬 목록</button>
         <button type="button" className={styles.control} aria-haspopup="dialog" onClick={() => setDetailOpen(true)}><Icon name="panel" />상세 패널</button>
       </div>
     </header>
 
-    {guideOpen && <div id="org-flow-guide" className={styles.guide}>
-      <h2>상담 한 건이 처리되는 과정</h2>
-      <p>발화 접수 후 라우팅과 정보 추출을 각각 요청합니다. 코드 판정·검증으로 답변을 준비하고, 상담사가 확인한 결과를 적용합니다. 번역은 필요할 때만 요청합니다.</p>
-      <ol>{FLOW.map((step) => <li key={step.id}><button type="button" onClick={() => inspect(step.id)}>{step.이름}<span>{step.행위자}</span></button></li>)}</ol>
-      <p>조직도의 연결선은 책임 관계입니다. 처리 순서나 가상의 대기열을 뜻하지 않습니다.</p>
-    </div>}
+    <section className={styles.process} aria-labelledby="org-process-title" data-testid="org-process">
+      <header className={styles.processHead}><div><p>실제 처리 순서</p><h2 id="org-process-title">검증한 결과를 만들고, 사람이 적용합니다</h2></div><span>현재 상태는 이 상담의 관측 기록만 반영합니다.</span></header>
+      <ol className={styles.processStages}>
+        {ORGANIZATION_PROCESS_STAGES.map((stage, index) => <li key={stage.id} className={styles.processStage} data-kind={stage.kind}>
+          <div className={styles.processStageHead}><span>{stage.kind === "parallel" ? "동시 요청" : stage.kind === "verification" ? "검증 묶음" : stage.kind === "answer" ? "답변과 선택 번역" : stage.kind === "endpoint" ? "사람의 실제 게이트" : "처리 단계"}</span><strong>{stage.title}</strong></div>
+          <p>{stage.description}</p>
+          <div className={`${styles.processCapabilities} ${stage.kind === "parallel" ? styles.concurrent : ""}`}>{inlineProcessCapabilities(stage.capabilityIds)}</div>
+          {stage.kind === "parallel" && <p className={styles.processNote}>두 요청은 서로의 완료를 기다리지 않습니다.</p>}
+          {!!stage.branchCapabilityIds?.length && <div className={styles.translationBranch}><span>선택 번역</span><div>{stage.branchCapabilityIds.map(processCapability)}</div><p>번역 실패 시에도 한국어 답변과 승인 경로는 유지됩니다.</p></div>}
+          <span className={styles.processOutput}><span>남기는 결과</span>{stage.output}</span>
+          {index < ORGANIZATION_PROCESS_STAGES.length - 1 && <span className={styles.processNext}>다음: {nextLabel(index)}</span>}
+        </li>)}
+      </ol>
+      <p className={styles.processCaption}>이 순서는 실제 결과 의존 관계입니다. 등록 스킬은 ‘결정 코드’가 실행하는 규칙 목록이며, 별도 AI 역할이나 실행 단계가 아닙니다.</p>
+    </section>
 
     <div className={styles.toolbar}>
       <label className={styles.search}><Icon name="search" /><input aria-label="조직도 스킬 검색" placeholder="기능·스킬·입력 찾기" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
@@ -102,23 +141,6 @@ export function OrgView({ live, availability, canApprove = false, onNavigate, on
     </div>
 
     {filtered.length === 0 ? <div className={styles.empty}><Icon name="search" /><h2>일치하는 업무 기능이 없습니다</h2><p>검색어를 바꾸거나 필터를 초기화해 보세요.</p></div> : <>
-      {filtered.some((item) => item.departmentId === null) && <div className={styles.authorityRow} aria-label="최종 확인과 결과 적용">{filtered.filter((item) => item.departmentId === null).map((item) => card(item, true))}</div>}
-      {!filtering && <>
-        <div className={styles.authorityConnector} aria-hidden="true" />
-        <div className={styles.coordinationRow}>
-          {[{ id: "routing", title: "상담 업무 조율", summary: "발화를 알맞은 검사로 연결하고, 판정에 필요한 값을 모읍니다.", members: ["input", "routing", "extract"], label: "분석 업무" },
-            { id: "guard", title: "검증·출력 통제", summary: "규칙과 용어를 대조하고, 확인된 결과만 답변과 승인으로 연결합니다.", members: ["guard", "ontology", "narrate"], label: "안전 통제" }].map((team) => {
-              const summary = summarizeOrgStates(team.members.map((id) => states.get(id)!));
-              return <button type="button" key={team.id} className={styles.coordination} aria-haspopup="dialog" onClick={() => inspect(team.id)}>
-                <span className={styles.coordinationTop}><span>{team.label}</span><span>{summary.running ? `실행 중 ${summary.running}개` : summary.blocked ? `확인 필요 ${summary.blocked}개` : summary.completed ? `완료 ${summary.completed}개` : "실행 전"}</span></span>
-                <strong>{team.title}</strong><span>{team.summary}</span>
-                <span className={styles.coordinationMeta}>담당 기능 {team.members.length}개 <span>역할 확인 ↗</span></span>
-              </button>;
-            })}
-        </div>
-        <div className={styles.departmentConnector} aria-hidden="true" />
-      </>}
-
       <div className={styles.departments}>
         {ORGANIZATION_DEPARTMENTS.map((department) => {
           const members = filtered.filter((item) => item.departmentId === department.id);
@@ -129,12 +151,13 @@ export function OrgView({ live, availability, canApprove = false, onNavigate, on
           </section>;
         })}
       </div>
+      {filtered.some((item) => item.departmentId === null) && <section className={styles.finalRoles} aria-labelledby="org-final-roles"><header><p>결과의 실제 끝점</p><h2 id="org-final-roles">상담사 승인 후 결과를 적용합니다</h2></header><div>{filtered.filter((item) => item.departmentId === null).map((item) => card(item))}</div></section>}
     </>}
 
     <footer className={styles.footer}>
       <div><span className={styles.liveMark} aria-hidden />현재 상담 기준 <span className={styles.scope}>{snapshot.label === "서비스 연결 지도" ? "아직 실행한 상담이 없습니다" : snapshot.label}</span></div>
       <div className={styles.legend} role="status" aria-live="polite"><span>실행 중 <strong>{counts.running}</strong></span><span>완료 <strong>{counts.completed}</strong></span><span>확인 필요 <strong>{counts.blocked}</strong></span><span>승인 필요 <strong>{counts.review}</strong></span></div>
-      <p>준비됨은 사용 가능한 기능입니다. AI 연결 여부와 실제 실행 상태는 구분합니다. 사진 인식은 준비 중이며, 이름·연락처·계좌번호는 입력받지 않습니다.</p>
+      <p>검색과 필터는 아래 역할 목록만 좁히며 실제 흐름을 바꾸지 않습니다. 준비됨은 사용 가능한 기능이고, AI 연결 여부와 실제 실행 상태는 구분합니다.</p>
     </footer>
 
     <dialog ref={dialogRef} className={styles.dialog} aria-labelledby="org-detail-title" onClose={() => setDetailOpen(false)} onKeyDown={(event) => { if (event.key === "Escape") event.stopPropagation(); }}>

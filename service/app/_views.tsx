@@ -21,6 +21,7 @@ import { OntologyWorkspace, type OntologyExecution } from "./_ontology";
 import { buildLiveOntology, type LiveOntologyInput } from "@/lib/ontology/live";
 import type { AgentLoop } from "./_agent-core";
 import { SectionHead, SubHead, Sentences, Pill, EmptyBox, StandardCard, won, navLabel, badgeTone } from "./_ui";
+export { ArtifactsView } from "./_artifacts";
 
 
 
@@ -264,47 +265,6 @@ export function AuditView({ runs, modelCalls = [], onSelectCase }: { runs: RunEn
 }
 
 /* ── 산출물 ── */
-
-export function ArtifactsView({
-  runs,
-  latestJson,
-}: {
-  runs: RunEntry[];
-  latestJson: string;
-}) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <Wrap
-      en="ARTIFACTS"
-      ko={navLabel("artifacts")}
-      desc="판정 결과를 그대로 파일로 내려받습니다. 화면에 표시된 값을 직접 확인하고 싶을 때 쓰세요."
-      right={<Pill>{runs.length ? "최근 실행 기준" : "실행 전"}</Pill>}
-    >
-      <div className="flex gap-2">
-        <button
-          onClick={() => {
-            navigator.clipboard?.writeText(latestJson);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          }}
-          className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-hover)]"
-        >
-          {copied ? "복사됨" : "판정 JSON 복사"}
-        </button>
-        <a
-          href={`data:application/json;charset=utf-8,${encodeURIComponent(latestJson)}`}
-          download="paycheck-findings.json"
-          className="rounded-lg border border-[var(--line)] px-4 py-2 text-sm font-semibold hover:bg-[var(--surface)]"
-        >
-          파일로 내려받기
-        </a>
-      </div>
-      <pre className="mt-4 max-h-[60vh] overflow-auto rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3 text-2xs leading-relaxed">
-        {latestJson}
-      </pre>
-    </Wrap>
-  );
-}
 
 /* ── 기준 적합성 맵 ── */
 

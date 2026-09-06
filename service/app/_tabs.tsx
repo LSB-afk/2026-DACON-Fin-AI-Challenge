@@ -8,7 +8,7 @@
  * 나머지는 탭 배지로 개수만 알린다.
  */
 
-import type { Finding, MoneyTotals } from "@/lib/rules/types";
+import type { ReceiptModel } from "@/lib/receipt";
 import type { SkillMeta } from "@/lib/skills";
 import type { Manifest, SelfTestResult, HookLogEntry } from "@/lib/harness/core";
 import type { Payslip } from "@/lib/rules/payslip";
@@ -16,7 +16,8 @@ import type { Answer } from "@/lib/narrate";
 import { 언어들, type LangCode } from "@/lib/ai/contract";
 import { standardsFor } from "@/lib/standards";
 import { 기준2026 } from "@/lib/rules/constants-2026";
-import { FindingCard, StandardCard, EmptyBox, Pill, won, 표시 } from "./_ui";
+import { StandardCard, EmptyBox, Pill, won, 표시 } from "./_ui";
+import { ReceiptView } from "./_receipt";
 
 const 셀 = "border-b border-[var(--line-soft)]";
 
@@ -169,20 +170,16 @@ export function LoopTab({ steps }: { steps: Step[] }) {
 /* ── 판정 ── */
 
 export function FindingsTab({
-  findings,
-  totals,
+  receipt,
   skill,
-  ran,
   routed,
 }: {
-  findings: Finding[];
-  totals: MoneyTotals;
+  receipt: ReceiptModel;
   skill: SkillMeta | null;
-  ran: boolean;
   routed: boolean;
 }) {
-  const fired = new Set(findings.map((f) => f.rule));
-  if (!ran && findings.length === 0) {
+  const fired = new Set(receipt.rows.map((row) => row.finding.rule));
+  if (!receipt.hasRun) {
     return (
       <div className="max-w-3xl">{/* 안내문은 본문 텍스트 — 줄 길이 캡 유지 */}
         <div className="rounded-[var(--radius-card)] border border-[var(--accent-tint-line)] bg-[var(--accent-tint)] px-4 py-4">
@@ -201,56 +198,15 @@ export function FindingsTab({
     );
   }
   return (
-    /* 폭 캡 제거 — 판정 카드가 ≥1280px 에서 2열로 흘러 가용 폭을 채운다 */
     <div className="w-full">
-      {findings.length === 0 ? (
+      {!receipt.hasFindings ? (
         <EmptyBox>
-          {ran && !routed
+          {!routed
             ? "어느 검사로 보낼지 정하지 못해 판정하지 않았습니다. 없는 기능을 있는 것처럼 보여 주지 않습니다."
-            : "판정을 실행하면 급한 순서(기한임박, 위법, 수령가능)로 표시됩니다."}
+            : "현재 입력으로 표시할 판정 항목이 없습니다."}
         </EmptyBox>
       ) : (
-        <>
-          {/*
-           * 확정과 추정을 한 숫자로 합치지 않는다. "확인된 금액 1,417만원"이라
-           * 합쳐 말하면 사용자는 그 숫자를 기대하고, 기관은 다른 숫자를 준다.
-           * 확인필요 참고 금액(S2-4 차액 등)은 위 범위와 겹칠 수 있어 아예 밖에 둔다.
-           */}
-          {(totals.확정 > 0 || totals.추정) && (
-            <div className="mb-4 rounded-lg border border-[var(--accent-tint-line)] bg-[var(--accent-tint)] px-4 py-3">
-              {totals.확정 > 0 && (
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-sm text-[var(--muted)]">
-                    <strong className="text-[var(--ink)]">확정</strong> 이미 떼였거나 본인이 낸 돈
-                  </span>
-                  <span className="text-2xl font-bold">{won(totals.확정)}</span>
-                </div>
-              )}
-              {totals.추정 && (
-                <div className={`flex items-baseline justify-between gap-3 ${totals.확정 > 0 ? "mt-1.5 border-t border-[var(--accent-tint-line)] pt-1.5" : ""}`}>
-                  <span className="text-sm text-[var(--muted)]">
-                    <strong className="text-[var(--ink)]">추정</strong> 기관에서 확인한 뒤 정해질 예상 금액
-                  </span>
-                  <span className="text-lg font-bold">
-                    약 {won(totals.추정.min)} ~ {won(totals.추정.max)}
-                  </span>
-                </div>
-              )}
-              {totals.확인필요참고 > 0 && (
-                <p className="mt-2 border-t border-[var(--accent-tint-line)] pt-2 text-xs leading-relaxed text-[var(--muted)]">
-                  따로 확인할 금액 {won(totals.확인필요참고)}은 위 금액과 겹칠 수 있어 합계에 넣지 않았습니다.
-                </p>
-              )}
-            </div>
-          )}
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(21rem,1fr))] gap-3">
-            {findings.map((f, i) => (
-              <div key={`${f.rule}-${i}`} className="motion-card" style={{ animationDelay: `${Math.min(i, 7) * 40}ms` }}>
-                <FindingCard f={f} />
-              </div>
-            ))}
-          </div>
-        </>
+        <ReceiptView receipt={receipt} compactHeader />
       )}
 
       {skill && (

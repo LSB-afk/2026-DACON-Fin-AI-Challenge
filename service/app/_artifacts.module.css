@@ -1,0 +1,23 @@
+.actionPanel { display: flex; align-items: end; justify-content: space-between; gap: 1.5rem; margin-top: 1.25rem; padding: 1.25rem; border: 1px solid var(--line-strong); border-radius: .7rem; background: linear-gradient(105deg, var(--accent-tint), var(--surface)); }
+.eyebrow { margin: 0 0 .2rem; color: var(--accent); font-size: var(--text-2xs); font-weight: 700; }
+.actionPanel h2, .previewHead h2 { margin: 0; font-size: 1.15rem; font-weight: 800; }
+.actionPanel p:not(.eyebrow) { max-width: 43rem; margin: .45rem 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.55; }
+.pdfButton { flex: 0 0 auto; border: 0; border-radius: .45rem; padding: .72rem .9rem; background: var(--accent); color: white; font-size: var(--text-sm); font-weight: 700; cursor: pointer; }
+.pdfButton:hover:not(:disabled) { background: var(--accent-hover); }
+.pdfButton:focus-visible, .json button:focus-visible, .error button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.pdfButton:disabled { cursor: not-allowed; opacity: .55; }
+.status, .limitation, .ledgerNote { margin: .65rem 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.55; }
+.limitation { padding-left: .65rem; border-left: 2px solid var(--line-strong); }
+.error { margin: .7rem 0 0; color: var(--warning-ink); font-size: var(--text-xs); }
+.error button { margin-left: .4rem; border-bottom: 1px solid currentColor; font-weight: 700; cursor: pointer; }
+.preview { margin-top: 2rem; }
+.previewHead { display: flex; align-items: end; justify-content: space-between; gap: 1rem; padding-bottom: .7rem; border-bottom: 2px solid var(--line-strong); }
+.previewHead span { color: var(--muted); font-size: var(--text-xs); }
+.json { margin-top: 2rem; border-top: 1px solid var(--line); padding-top: .8rem; }
+.json summary { cursor: pointer; font-size: var(--text-sm); font-weight: 700; }
+.json > p { margin: .55rem 0; color: var(--muted); font-size: var(--text-xs); }
+.jsonActions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.jsonActions button, .jsonActions a { border: 1px solid var(--line); border-radius: .4rem; padding: .48rem .65rem; background: var(--surface); font-size: var(--text-xs); font-weight: 700; }
+.jsonActions button:hover, .jsonActions a:hover { background: var(--accent-tint); }
+.json pre { max-height: 26rem; overflow: auto; margin-top: .75rem; padding: .8rem; border: 1px solid var(--line); border-radius: .45rem; background: var(--surface); font-size: var(--text-2xs); line-height: 1.5; }
+@media (max-width: 640px) { .actionPanel { align-items: stretch; flex-direction: column; } .pdfButton { width: 100%; } }

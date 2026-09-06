@@ -88,6 +88,49 @@ export const ORGANIZATION_CAPABILITIES: readonly OrgCapability[] = [
     serviceId: "service:application", target: { view: "agent-run", label: "결과 적용" },
   },
 ];
+
+export type OrgProcessStageKind = "standard" | "parallel" | "verification" | "answer" | "endpoint";
+export type OrgProcessStage = {
+  id: string;
+  title: string;
+  description: string;
+  output: string;
+  capabilityIds: readonly string[];
+  branchCapabilityIds?: readonly string[];
+  kind: OrgProcessStageKind;
+};
+export type OrgProcessEdge = { from: string; to: string; kind: "required" | "optional" };
+
+function namedOutput(id: string, index = 0) {
+  const capability = ORGANIZATION_CAPABILITIES.find((item) => item.id === id);
+  if (!capability) throw new Error(`Unknown organization capability: ${id}`);
+  return capability.output[index] ?? capability.output[0];
+}
+
+/** Actual execution relationships for the organization view; this does not schedule capabilities. */
+export const ORGANIZATION_PROCESS_STAGES: readonly OrgProcessStage[] = [
+  { id: "input", title: "상담 접수", description: "상담 발화를 현재 실행으로 접수합니다.", output: namedOutput("input"), capabilityIds: ["input"], kind: "standard" },
+  { id: "agent-requests", title: "AI 요청 · 동시에", description: "라우팅과 값 추출은 서로 기다리지 않는 두 요청입니다.", output: "검사 후보와 추출한 확인값", capabilityIds: ["routing", "extract"], kind: "parallel" },
+  { id: "judge", title: "결정 코드", description: "AI가 아닌 등록된 규칙 코드가 같은 입력을 같은 결과로 판정합니다.", output: namedOutput("judge"), capabilityIds: ["judge"], kind: "standard" },
+  { id: "verification", title: "검증", description: "가드레일 검사와 온톨로지 대조로 판정과 용어를 확인합니다.", output: `${namedOutput("guard")} · ${namedOutput("ontology")}`, capabilityIds: ["guard", "ontology"], kind: "verification" },
+  { id: "answer", title: "한국어 답변", description: "검증한 판정으로 다음 행동을 안내하는 한국어 답변을 만듭니다.", output: namedOutput("narrate"), capabilityIds: ["narrate"], branchCapabilityIds: ["translate"], kind: "answer" },
+  { id: "endpoint", title: "승인 후 적용·기록", description: "상담사의 실제 승인이 결과 적용을 열고, 적용한 상담의 기록을 남깁니다.", output: namedOutput("record"), capabilityIds: ["approval", "application", "record"], kind: "endpoint" },
+];
+
+/** Routing and extraction are parallel request boundaries; optional translation never gates approval. */
+export const ORGANIZATION_PROCESS_EDGES: readonly OrgProcessEdge[] = [
+  { from: "input", to: "routing", kind: "required" },
+  { from: "input", to: "extract", kind: "required" },
+  { from: "routing", to: "judge", kind: "required" },
+  { from: "extract", to: "judge", kind: "required" },
+  { from: "judge", to: "guard", kind: "required" },
+  { from: "guard", to: "ontology", kind: "required" },
+  { from: "ontology", to: "narrate", kind: "required" },
+  { from: "narrate", to: "translate", kind: "optional" },
+  { from: "narrate", to: "approval", kind: "required" },
+  { from: "approval", to: "application", kind: "required" },
+  { from: "application", to: "record", kind: "required" },
+];
 export type OrgStatus = "ready" | "running" | "completed" | "blocked" | "offline" | "review";
 export type OrgCapabilityState = { status: OrgStatus; label: string; detail: string; ms?: number };
 
