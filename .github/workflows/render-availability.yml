@@ -1,0 +1,59 @@
+name: Render availability
+
+on:
+  workflow_dispatch:
+  schedule:
+    # UTC; the checker enforces the exact 2026 KST window and buffer.
+    - cron: "3-58/5 * 5-12 9 *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-availability
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    # No URL has been deployed yet: skip scheduled jobs, never claim healthy.
+    # A manual run with missing configuration deliberately fails.
+    if: ${{ vars.RENDER_SERVICE_URL != '' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      RENDER_SERVICE_URL: ${{ vars.RENDER_SERVICE_URL }}
+      EXPECTED_DEPLOY_SHA: ${{ vars.RENDER_EXPECTED_COMMIT }}
+      EVENT_NAME: ${{ github.event_name }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24.11.1"
+      - name: Require a public Render origin and frozen release SHA
+        run: |
+          node --input-type=module -e '
+            const raw = process.env.RENDER_SERVICE_URL;
+            let url;
+            try { url = new URL(raw); } catch {}
+            if (!url || url.protocol !== "https:" || !url.hostname.endsWith(".onrender.com") || url.username || url.password || url.port || url.pathname !== "/" || url.search || url.hash) {
+              console.error("Set RENDER_SERVICE_URL to the deployed https://SERVICE.onrender.com origin (no credentials or path).");
+              process.exit(2);
+            }
+            if (!/^[a-f0-9]{40}$/.test(process.env.EXPECTED_DEPLOY_SHA ?? "")) {
+              console.error("Set RENDER_EXPECTED_COMMIT to the verified deployment full commit SHA.");
+              process.exit(2);
+            }
+          '
+      - name: Check liveness, release, homepage and AI configuration without inference
+        run: |
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            node service/scripts/smoke.mjs "$RENDER_SERVICE_URL" --scheduled
+          else
+            node service/scripts/smoke.mjs "$RENDER_SERVICE_URL"
+          fi
+      - name: Record the limits of this check
+        if: always()
+        run: |
+          echo 'This run is a point-in-time check, not an uptime guarantee. AI configuration is checked without validating API credit or running inference. Failed runs require operator attention; scheduled runs themselves can be delayed or dropped.' >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,48 @@
+name: Service CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["service/**", "render.yaml", ".github/workflows/**"]
+  pull_request:
+    paths: ["service/**", "render.yaml", ".github/workflows/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: service-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: service
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24.11.1"
+          cache: npm
+          cache-dependency-path: service/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run ci
+      - name: Verify the built HTTP service without AI credentials
+        env:
+          PORT: "3100"
+          RENDER_GIT_COMMIT: ${{ github.sha }}
+          EXPECTED_DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port "$PORT" &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          node scripts/smoke.mjs "http://127.0.0.1:$PORT" --allow-unconfigured-ai

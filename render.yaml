@@ -1,0 +1,24 @@
+# Free compute is explicit. Creating this Blueprint still requires Render login.
+services:
+  - type: web
+    name: paycheck-fin-ai
+    runtime: node
+    plan: free
+    region: singapore
+    repo: https://github.com/LSB-afk/2026-DACON-Fin-AI-Challenge
+    branch: main
+    rootDir: service
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start -- --hostname 0.0.0.0 --port "$PORT"
+    healthCheckPath: /api/health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: NODE_VERSION
+        value: 24.11.1
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      # Supply privately in Render. Use an actual model available to this account.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        sync: false
