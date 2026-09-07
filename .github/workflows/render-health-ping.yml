@@ -1,0 +1,67 @@
+name: Render health ping
+
+on:
+  workflow_dispatch:
+  schedule:
+    # UTC, every five minutes. GitHub may delay or drop scheduled events.
+    - cron: "2-57/5 * * * *"
+
+# No checkout, repository writes, deployment hooks, or AI requests.
+permissions: {}
+
+concurrency:
+  group: render-health-ping
+  cancel-in-progress: false
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      EXPECTED_DEPLOY_SHA: ${{ vars.RENDER_EXPECTED_COMMIT }}
+    steps:
+      - name: Request only the submitted service's existing health endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$EXPECTED_DEPLOY_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+            echo 'The verified submitted deployment SHA must remain configured.' >&2
+            exit 2
+          fi
+
+          # This fixed URL must not be changed during judging.
+          # Allow time for an already sleeping free instance to wake up.
+          status="$(curl --silent --show-error --fail \
+            --proto '=https' --connect-timeout 15 --max-time 90 \
+            --retry 1 --retry-delay 5 --retry-max-time 185 \
+            --max-filesize 65536 --header 'Cache-Control: no-cache' \
+            --output "$RUNNER_TEMP/paycheck-health.json" \
+            --write-out '%{http_code}' \
+            'https://paycheck-fin-ai.onrender.com/api/health')"
+          if [[ "$status" != '200' ]]; then
+            echo "Health request returned HTTP $status" >&2
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          result = json.loads((Path(os.environ["RUNNER_TEMP"]) / "paycheck-health.json").read_text())
+          if not isinstance(result, dict) or result.get("status") != "ok" or result.get("service") != "paycheck":
+              raise SystemExit("The response is not the Paycheck health response.")
+          if result.get("revision") != os.environ["EXPECTED_DEPLOY_SHA"]:
+              raise SystemExit("The serving revision differs from the submitted deployment.")
+          checked_at = datetime.fromisoformat(result["checkedAt"].replace("Z", "+00:00"))
+          age = (datetime.now(timezone.utc) - checked_at).total_seconds()
+          if not -60 <= age < 300:
+              raise SystemExit("The health response timestamp is not fresh.")
+          print(f"PASS: HTTP 200; revision={result['revision']}; checkedAt={result['checkedAt']}")
+          PY
+      - name: Record the execution limit
+        if: always()
+        shell: bash
+        run: |
+          echo 'GitHub sends a GET only to the existing /api/health endpoint. No application edits or deployments occur. Five minutes is the requested schedule, not a guaranteed execution interval.' >> "$GITHUB_STEP_SUMMARY"
