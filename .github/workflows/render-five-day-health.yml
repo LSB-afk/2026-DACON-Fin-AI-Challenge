@@ -1,0 +1,86 @@
+name: Render five-day health watch
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-five-day-health-watch
+  cancel-in-progress: false
+
+jobs:
+  window:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      end_at: ${{ steps.window.outputs.end_at }}
+      revision: ${{ steps.window.outputs.revision }}
+    env:
+      EXPECTED_DEPLOY_SHA: ${{ vars.RENDER_EXPECTED_COMMIT }}
+    steps:
+      - name: Freeze one five-day deadline and the submitted revision
+        id: window
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import datetime
+          import os
+          import re
+
+          revision = os.environ["EXPECTED_DEPLOY_SHA"]
+          if not re.fullmatch(r"[a-f0-9]{40}", revision):
+              raise SystemExit("The submitted deployment SHA must be configured.")
+          end_at = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=5)).isoformat()
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"end_at={end_at}\nrevision={revision}\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write(f"GET-only health watch ends at **{end_at}**. Frozen revision: `{revision}`. Cancelling this run stops the watch. Existing scheduled checks remain separate.\n")
+          print(f"Five-day deadline: {end_at}; submitted revision: {revision}")
+          PY
+  verify_loop:
+    name: Verify two live health requests and the first handoff
+    needs: window
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      WATCH_END_AT: ${{ needs.window.outputs.end_at }}
+      EXPECTED_DEPLOY_SHA: ${{ needs.window.outputs.revision }}
+      WATCH_SEGMENT_SECONDS: "300"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+      - name: Verify repetition and deadline boundaries
+        run: python3 -m unittest discover -s .github/scripts -p 'test_render_health_watch.py' -v
+      - name: Observe repeated live requests for five minutes
+        run: python3 .github/scripts/render_health_watch.py
+  health:
+    name: Health segment ${{ matrix.segment }}/25
+    needs: [window, verify_loop]
+    if: ${{ always() && !cancelled() && needs.window.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 310
+    strategy:
+      # Identical five-hour segments share one absolute cutoff; order is irrelevant.
+      # One extra segment provides a small reserve; expired segments send no GETs.
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        segment: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
+    env:
+      WATCH_END_AT: ${{ needs.window.outputs.end_at }}
+      EXPECTED_DEPLOY_SHA: ${{ needs.window.outputs.revision }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+      - name: Verify request repetition, failures and deadline boundaries
+        run: python3 -m unittest discover -s .github/scripts -p 'test_render_health_watch.py' -v
+      - name: Send health GETs every four minutes within the fixed window
+        run: python3 .github/scripts/render_health_watch.py
